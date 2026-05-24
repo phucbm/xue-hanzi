@@ -73,6 +73,7 @@ export const HanziPad = forwardRef<HanziPadHandle, HanziPadProps>(
 
     const onPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
       e.preventDefault()
+      e.currentTarget.setPointerCapture(e.pointerId)
       drawingRef.current = true
       const p = getPoint(e)
       currentRef.current = [p]
@@ -87,6 +88,7 @@ export const HanziPad = forwardRef<HanziPadHandle, HanziPadProps>(
     }, [strokeColor, lineWidth])
 
     const onPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+      e.preventDefault()
       if (!drawingRef.current || !currentRef.current) return
       const p = getPoint(e)
       currentRef.current.push(p)
