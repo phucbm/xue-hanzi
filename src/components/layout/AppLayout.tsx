@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { SearchIcon, BookOpenIcon } from "lucide-react";
+import { SearchIcon, History } from "lucide-react";
 import { SearchDialog } from "@/components/search/search-dialog";
 import { RightSheet } from "@/components/layout/right-sheet";
-import { useViewedWords } from "@/hooks/useViewedWords";
+import type { HistoryEntry } from "@/core/types";
 import pkg from "../../../package.json";
 
 const GITHUB_URL = "https://github.com/phucbm/hieu-chu-han";
@@ -31,17 +31,52 @@ function DiscordIcon({ className }: { className?: string }) {
 }
 
 interface AppLayoutProps {
-  /** Called when logo is clicked — use to reset page state on same-route navigation. */
   onHome?: () => void;
   onSearchSelect?: (simp: string) => void;
+  onSearchQuery?: (query: string) => void;
+  history?: HistoryEntry[];
+  onHistoryRemove?: (id: string) => void;
+  onHistoryClear?: () => void;
+  passphrase?: string | null;
+  isSynced?: boolean;
+  isSyncing?: boolean;
+  onAuthenticate?: (pass: string) => Promise<boolean>;
+  onLogout?: () => void;
   children: React.ReactNode;
 }
 
-export function AppLayout({ onHome, onSearchSelect, children }: AppLayoutProps) {
+export function AppLayout({
+  onHome,
+  onSearchSelect,
+  onSearchQuery,
+  history = [],
+  onHistoryRemove,
+  onHistoryClear,
+  passphrase,
+  isSynced,
+  isSyncing,
+  onAuthenticate,
+  onLogout,
+  children,
+}: AppLayoutProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
 
-  const { viewedWords, removeViewedWord } = useViewedWords();
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "/") {
+        e.preventDefault();
+        setHistoryOpen((v) => !v);
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, []);
+
+  const recentWordLabels = history
+    .filter((e) => e.type === "word")
+    .slice(0, 5)
+    .map((e) => e.label);
 
   function handleSearchSelect(simp: string) {
     setSearchOpen(false);
@@ -106,15 +141,26 @@ export function AppLayout({ onHome, onSearchSelect, children }: AppLayoutProps) 
           <SearchIcon className="h-4 w-4" />
         </Button>
 
-        {/* History */}
+        {/* History — label + kbd on desktop, icon-only on mobile */}
         <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1.5 text-muted-foreground font-normal hidden sm:flex"
           onClick={() => setHistoryOpen(true)}
           aria-label="Lịch sử"
         >
-          <BookOpenIcon className="h-4 w-4" />
+          <History className="h-3.5 w-3.5" />
+          <span>Lịch sử</span>
+          <kbd className="ml-1 text-xs border rounded px-1 py-0.5 bg-muted leading-none">⌘/</kbd>
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 sm:hidden"
+          onClick={() => setHistoryOpen(true)}
+          aria-label="Lịch sử"
+        >
+          <History className="h-4 w-4" />
         </Button>
       </header>
 
@@ -167,18 +213,22 @@ export function AppLayout({ onHome, onSearchSelect, children }: AppLayoutProps) 
         open={searchOpen}
         onOpenChange={setSearchOpen}
         onSelect={handleSearchSelect}
-        viewedWords={viewedWords}
+        recentWordLabels={recentWordLabels}
+        onSearchQuery={onSearchQuery}
       />
 
       <RightSheet
         open={historyOpen}
         onOpenChange={setHistoryOpen}
-        viewedWords={viewedWords}
-        onSelect={(simp) => {
-          handleSearchSelect(simp);
-          setHistoryOpen(false);
-        }}
-        onRemove={removeViewedWord}
+        history={history}
+        onSelect={handleSearchSelect}
+        onRemove={onHistoryRemove ?? (() => {})}
+        onClear={onHistoryClear ?? (() => {})}
+        passphrase={passphrase}
+        isSynced={isSynced}
+        isSyncing={isSyncing}
+        onAuthenticate={onAuthenticate}
+        onLogout={onLogout}
       />
     </div>
   );

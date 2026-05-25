@@ -73,6 +73,16 @@ export async function initSchema() {
         created_at           TEXT NOT NULL,
         updated_at           TEXT NOT NULL
       )`,
+      `CREATE TABLE IF NOT EXISTS user_history (
+        id         TEXT PRIMARY KEY,
+        type       TEXT NOT NULL,
+        label      TEXT NOT NULL,
+        timestamp  INTEGER NOT NULL,
+        view_count INTEGER NOT NULL DEFAULT 1,
+        updated_at TEXT NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_user_history_timestamp
+        ON user_history(timestamp DESC)`,
     ],
     "write"
   );
