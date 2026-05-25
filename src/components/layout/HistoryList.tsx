@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { SearchIcon, X } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { SearchIcon, X, Cloud, CloudOff, Loader2, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { WordRow } from "@/components/search/WordRow";
 import { getWordDetail } from "@/core/client-dictionary";
 import type { HistoryEntry } from "@/core/types";
 import type { WordEntry } from "@/core/types";
+import { toast } from "sonner";
 
 function timeAgo(timestamp: number): string {
   const diff = Date.now() - timestamp;
@@ -28,10 +30,28 @@ interface HistoryListProps {
   onSelect: (label: string) => void;
   onRemove: (id: string) => void;
   onClear: () => void;
+  passphrase?: string | null;
+  isSynced?: boolean;
+  isSyncing?: boolean;
+  onAuthenticate?: (pass: string) => Promise<boolean>;
+  onLogout?: () => void;
 }
 
-export function HistoryList({ history, onSelect, onRemove, onClear }: HistoryListProps) {
+export function HistoryList({
+  history,
+  onSelect,
+  onRemove,
+  onClear,
+  passphrase,
+  isSynced,
+  isSyncing,
+  onAuthenticate,
+  onLogout,
+}: HistoryListProps) {
   const [entryMap, setEntryMap] = useState<Map<string, WordEntry>>(new Map());
+  const [inputValue, setInputValue] = useState("");
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const wordEntries = history.filter((e) => e.type === "word");
 
@@ -53,11 +73,89 @@ export function HistoryList({ history, onSelect, onRemove, onClear }: HistoryLis
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [history]);
 
+  async function handleAuth(e: React.FormEvent) {
+    e.preventDefault();
+    if (!inputValue.trim() || !onAuthenticate) return;
+    setIsAuthenticating(true);
+    try {
+      const ok = await onAuthenticate(inputValue.trim());
+      if (ok) {
+        setInputValue("");
+        toast.success("Đã đồng bộ lịch sử từ cloud");
+      } else {
+        toast.error("Sai passphrase");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsAuthenticating(false);
+    }
+  }
+
+  const syncFooter = (
+    <div className="mt-3 pt-3 border-t">
+      {passphrase ? (
+        <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+          <span className="flex items-center gap-1.5">
+            {isSyncing ? (
+              <Loader2 className="size-3 animate-spin" />
+            ) : isSynced ? (
+              <Cloud className="size-3 text-green-500" />
+            ) : (
+              <CloudOff className="size-3" />
+            )}
+            {isSyncing ? "Đang đồng bộ..." : isSynced ? "Đã đồng bộ cloud" : "Chưa đồng bộ"}
+          </span>
+          {onLogout && (
+            <button
+              type="button"
+              onClick={onLogout}
+              className="flex items-center gap-1 hover:text-foreground transition-colors"
+              title="Đăng xuất"
+            >
+              <LogOut className="size-3" />
+              <span>Đăng xuất</span>
+            </button>
+          )}
+        </div>
+      ) : (
+        <>
+          <form onSubmit={handleAuth} className="flex gap-2 px-1">
+            <Input
+              ref={inputRef}
+              type="password"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              placeholder="Passphrase để sync cloud..."
+              className="h-7 text-xs flex-1"
+              disabled={isAuthenticating}
+            />
+            <Button
+              type="submit"
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs shrink-0"
+              disabled={isAuthenticating || !inputValue.trim()}
+            >
+              {isAuthenticating ? <Loader2 className="size-3 animate-spin" /> : "Sync"}
+            </Button>
+          </form>
+          <p className="text-xs text-muted-foreground px-1 mt-1.5">
+            Sync không public. Liên hệ qua Discord để được cấp quyền.
+          </p>
+        </>
+      )}
+    </div>
+  );
+
   if (history.length === 0) {
     return (
-      <p className="text-xs text-muted-foreground text-center px-4 py-8">
-        Chưa có lịch sử nào.
-      </p>
+      <div className="flex flex-col gap-3">
+        <p className="text-xs text-muted-foreground text-center px-4 py-8">
+          Chưa có lịch sử nào.
+        </p>
+        {syncFooter}
+      </div>
     );
   }
 
@@ -129,6 +227,8 @@ export function HistoryList({ history, onSelect, onRemove, onClear }: HistoryLis
       >
         Xóa tất cả lịch sử
       </Button>
+
+      {syncFooter}
     </div>
   );
 }

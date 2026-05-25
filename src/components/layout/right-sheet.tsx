@@ -17,6 +17,11 @@ interface RightSheetProps {
   onSelect: (label: string) => void
   onRemove: (id: string) => void
   onClear: () => void
+  passphrase?: string | null
+  isSynced?: boolean
+  isSyncing?: boolean
+  onAuthenticate?: (pass: string) => Promise<boolean>
+  onLogout?: () => void
 }
 
 export function RightSheet({
@@ -26,6 +31,11 @@ export function RightSheet({
   onSelect,
   onRemove,
   onClear,
+  passphrase,
+  isSynced,
+  isSyncing,
+  onAuthenticate,
+  onLogout,
 }: RightSheetProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -45,6 +55,11 @@ export function RightSheet({
               }}
               onRemove={onRemove}
               onClear={onClear}
+              passphrase={passphrase}
+              isSynced={isSynced}
+              isSyncing={isSyncing}
+              onAuthenticate={onAuthenticate}
+              onLogout={onLogout}
             />
           </div>
         </ScrollArea>

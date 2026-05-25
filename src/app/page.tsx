@@ -12,7 +12,18 @@ export default function HomePage() {
   const [activeTab, setActiveTab] = useState<string | undefined>();
   const [isWordLoading, startDetailTransition] = useTransition();
 
-  const { history, addWordEntry, addSearchEntry, removeEntry, clearHistory } = useHistory();
+  const {
+    history,
+    addWordEntry,
+    addSearchEntry,
+    removeEntry,
+    clearHistory,
+    passphrase,
+    isSynced,
+    isSyncing,
+    authenticate,
+    logout,
+  } = useHistory();
 
   const lastOpenedTabRef = useRef<string | null>(null);
 
@@ -84,6 +95,11 @@ export default function HomePage() {
       history={history}
       onHistoryRemove={removeEntry}
       onHistoryClear={clearHistory}
+      passphrase={passphrase}
+      isSynced={isSynced}
+      isSyncing={isSyncing}
+      onAuthenticate={authenticate}
+      onLogout={logout}
     >
       <ContentArea
         entries={entries}

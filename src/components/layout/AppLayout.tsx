@@ -37,6 +37,11 @@ interface AppLayoutProps {
   history?: HistoryEntry[];
   onHistoryRemove?: (id: string) => void;
   onHistoryClear?: () => void;
+  passphrase?: string | null;
+  isSynced?: boolean;
+  isSyncing?: boolean;
+  onAuthenticate?: (pass: string) => Promise<boolean>;
+  onLogout?: () => void;
   children: React.ReactNode;
 }
 
@@ -47,6 +52,11 @@ export function AppLayout({
   history = [],
   onHistoryRemove,
   onHistoryClear,
+  passphrase,
+  isSynced,
+  isSyncing,
+  onAuthenticate,
+  onLogout,
   children,
 }: AppLayoutProps) {
   const [searchOpen, setSearchOpen] = useState(false);
@@ -214,6 +224,11 @@ export function AppLayout({
         onSelect={handleSearchSelect}
         onRemove={onHistoryRemove ?? (() => {})}
         onClear={onHistoryClear ?? (() => {})}
+        passphrase={passphrase}
+        isSynced={isSynced}
+        isSyncing={isSyncing}
+        onAuthenticate={onAuthenticate}
+        onLogout={onLogout}
       />
     </div>
   );
