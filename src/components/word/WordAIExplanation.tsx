@@ -19,6 +19,7 @@ import {
   getAiUsageStatus,
   type AiExplanation,
 } from "@/app/actions/aiExplanation";
+import type { WordEntry } from "@/core/types";
 import { GUEST_DAILY_LIMIT, USER_DAILY_LIMIT } from "@/lib/aiConstants";
 import { trackAiCall } from "@/core/pwa";
 import { Check, ChevronDown, Copy, ExternalLink, Loader2, Sparkles } from "lucide-react";
@@ -26,9 +27,33 @@ import { MovingBorder } from "@/components/phucbm/moving-border";
 import { AiCreditBadge } from "@/components/shared/AiCreditBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 
+const AI_PROVIDER = "openrouter";
+
 let _promptTemplate: string | null = null;
 
-async function buildPrompt(simp: string, trad?: string): Promise<string> {
+function buildDictContext(entry: WordEntry): string {
+  const lines: string[] = [];
+  lines.push(`Chữ/từ: ${entry.simp}${entry.trad !== entry.simp ? ` / ${entry.trad}` : ""}`);
+  lines.push(`Bính âm: ${entry.pinyin}`);
+  if (entry.sinoVietnamese) lines.push(`Hán Việt: ${entry.sinoVietnamese}`);
+  if (entry.statistics.hskLevel) lines.push(`HSK: ${entry.statistics.hskLevel}`);
+  if (entry.definitionVi) lines.push(`Nghĩa tiếng Việt: ${entry.definitionVi}`);
+  if (entry.definitionsEn.length > 0) lines.push(`Nghĩa tiếng Anh: ${entry.definitionsEn.join("; ")}`);
+  if (entry.etymology) {
+    const typeLabel = (t: string) => t === "meaning" ? "nghĩa" : t === "sound" ? "gợi âm" : "không rõ";
+    if (entry.etymology.notes) lines.push(`Ghi chú nguồn gốc: ${entry.etymology.notes}`);
+    if (entry.etymology.components.length > 0) {
+      lines.push("Thành phần:");
+      for (const c of entry.etymology.components) {
+        const sv = c.sinoVietnamese ? ` / Hán Việt: ${c.sinoVietnamese}` : "";
+        lines.push(`  - ${c.char} (${typeLabel(c.type)}): ${c.definition} [${c.pinyin}]${sv}`);
+      }
+    }
+  }
+  return lines.join("\n");
+}
+
+async function buildPrompt(simp: string, trad?: string, dictContext?: string): Promise<string> {
   if (!_promptTemplate) {
     const res = await fetch("/prompts/word-analysis.md");
     _promptTemplate = await res.text();
@@ -37,7 +62,8 @@ async function buildPrompt(simp: string, trad?: string): Promise<string> {
   return _promptTemplate
     .replace(/\{\{simp\}\}/g, simp)
     .replace(/\{\{trad\}\}/g, trad ?? simp)
-    .replace(/\{\{trad_line\}\}/g, tradLine);
+    .replace(/\{\{trad_line\}\}/g, tradLine)
+    .replace(/\{\{dict_context\}\}/g, dictContext ?? "(không có dữ liệu từ điển)");
 }
 
 function relativeTime(iso: string): string {
@@ -50,6 +76,7 @@ function relativeTime(iso: string): string {
 interface WordAIExplanationProps {
   simp: string;
   trad?: string;
+  wordEntry?: WordEntry;
 }
 
 type Status = "idle" | "loading" | "streaming" | "done" | "error";
@@ -60,7 +87,7 @@ interface UsageStatus {
   isSignedIn: boolean;
 }
 
-export function WordAIExplanation({ simp, trad }: WordAIExplanationProps) {
+export function WordAIExplanation({ simp, trad, wordEntry }: WordAIExplanationProps) {
   const { isLoaded, isSignedIn, userId } = useAuth();
 
   const [status, setStatus] = useState<Status>("idle");
@@ -101,27 +128,29 @@ export function WordAIExplanation({ simp, trad }: WordAIExplanationProps) {
   const limit = isSignedIn ? USER_DAILY_LIMIT : GUEST_DAILY_LIMIT;
   const isLimited = remaining !== null && remaining <= 0;
 
+  const dictContext = wordEntry ? buildDictContext(wordEntry) : undefined;
+
   async function handleCopyPrompt() {
-    const prompt = await buildPrompt(simp, trad);
+    const prompt = await buildPrompt(simp, trad, dictContext);
     await navigator.clipboard.writeText(prompt);
     setPromptCopied(true);
     setTimeout(() => setPromptCopied(false), 2000);
   }
 
   async function handleOpenChatGPT() {
-    const prompt = await buildPrompt(simp, trad);
+    const prompt = await buildPrompt(simp, trad, dictContext);
     await navigator.clipboard.writeText(prompt);
     window.open("https://chatgpt.com/", "_blank");
   }
 
   async function handleOpenClaude() {
-    const prompt = await buildPrompt(simp, trad);
+    const prompt = await buildPrompt(simp, trad, dictContext);
     await navigator.clipboard.writeText(prompt);
     window.open("https://claude.ai/new", "_blank");
   }
 
   async function handleOpenGemini() {
-    const prompt = await buildPrompt(simp, trad);
+    const prompt = await buildPrompt(simp, trad, dictContext);
     await navigator.clipboard.writeText(prompt);
     window.open("https://gemini.google.com/app", "_blank");
   }
@@ -137,7 +166,7 @@ export function WordAIExplanation({ simp, trad }: WordAIExplanationProps) {
     setError("");
 
     try {
-      const stream = streamWordAnalysis(simp, trad);
+      const { model: aiModel, stream } = await streamWordAnalysis(simp, trad, dictContext);
       setStatus("streaming");
 
       if (!isSignedIn) setGuestCalls((n) => n + 1);
@@ -148,7 +177,7 @@ export function WordAIExplanation({ simp, trad }: WordAIExplanationProps) {
         setStreamContent(full);
       }
 
-      await saveAiExplanation(simp, full, "groq");
+      await saveAiExplanation(simp, full, aiModel);
       void trackAiCall();
 
       // Refresh cached explanation and usage
@@ -232,6 +261,7 @@ export function WordAIExplanation({ simp, trad }: WordAIExplanationProps) {
               onClick={handleGenerate}
               disabled={isRunning || isLimited}
               className="gap-1.5 text-xs h-7"
+              title={cached?.model ?? AI_PROVIDER}
             >
               {isRunning ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -315,8 +345,8 @@ export function WordAIExplanation({ simp, trad }: WordAIExplanationProps) {
             <div className="flex items-center justify-between border-t border-border pt-2">
               <p className="text-xs text-muted-foreground">
                 AI{cached && !isRunning
-                  ? ` · ${relativeTime(cached.generatedAt)} · ${cached.userId === userId ? "bởi bạn" : "bởi một bạn học khác"}`
-                  : ""} - nội dung được tạo bởi AI, có thể không chính xác và chỉ để tham khảo.
+                  ? ` · ${relativeTime(cached.generatedAt)} · ${cached.userId === userId ? "bởi bạn" : "bởi một bạn học khác"} · ${cached.model}`
+                  : isRunning ? ` · ${AI_PROVIDER}` : ""} - nội dung được tạo bởi AI, có thể không chính xác và chỉ để tham khảo.
               </p>
             </div>
           </div>

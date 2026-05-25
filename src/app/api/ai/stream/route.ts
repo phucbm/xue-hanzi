@@ -5,7 +5,7 @@ import { auth } from "@clerk/nextjs/server";
 import { db, initSchema } from "@/lib/turso";
 import { GUEST_DAILY_LIMIT, USER_DAILY_LIMIT, AI_WINDOW_MS } from "@/lib/aiConstants";
 
-const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
+const AI_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 let schemaReady = false;
 
@@ -25,14 +25,14 @@ function getClientIp(req: NextRequest): string {
 }
 
 export async function POST(req: NextRequest) {
-  const key = process.env.GROQ_API_KEY;
-  const model = process.env.GROQ_MODEL || "llama-3.1-8b-instant";
+  const key = process.env.OPENROUTER_API_KEY ?? process.env.GROQ_API_KEY;
+  const model = process.env.AI_MODEL;
 
   if (!key) {
     return new Response("AI chưa được cấu hình.", { status: 503 });
   }
 
-  const { simp, trad } = await req.json();
+  const { simp, trad, dictContext } = await req.json();
   if (!simp || typeof simp !== "string") {
     return new Response("Dữ liệu không hợp lệ.", { status: 400 });
   }
@@ -89,16 +89,17 @@ export async function POST(req: NextRequest) {
   const prompt = template
     .replace(/\{\{simp\}\}/g, simp)
     .replace(/\{\{trad\}\}/g, trad ?? simp)
-    .replace(/\{\{trad_line\}\}/g, tradLine);
+    .replace(/\{\{trad_line\}\}/g, tradLine)
+    .replace(/\{\{dict_context\}\}/g, dictContext && typeof dictContext === "string" ? dictContext : "(không có dữ liệu từ điển)");
 
-  const upstream = await fetch(GROQ_API_URL, {
+  const upstream = await fetch(AI_API_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${key}`,
     },
     body: JSON.stringify({
-      model,
+      ...(model && { model }),
       stream: true,
       temperature: 0,
       max_tokens: 16384,
@@ -108,7 +109,7 @@ export async function POST(req: NextRequest) {
 
   if (!upstream.ok) {
     const err = await upstream.text();
-    return new Response(`Lỗi từ GROQ (${upstream.status}): ${err}`, { status: 502 });
+    return new Response(`Lỗi từ AI (${upstream.status}): ${err}`, { status: 502 });
   }
 
   return new Response(upstream.body, {
@@ -116,6 +117,7 @@ export async function POST(req: NextRequest) {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
+      "X-AI-Model": model ?? "openrouter",
     },
   });
 }

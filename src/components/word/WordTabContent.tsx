@@ -92,7 +92,7 @@ export function WordTabContent({ entry, onWordClick }: WordTabContentProps) {
                 </Dialog>
 
 
-                <WordAIExplanation simp={entry.simp} trad={entry.trad}/>
+                <WordAIExplanation simp={entry.simp} trad={entry.trad} wordEntry={entry}/>
 
                 {isSingleChar && (
                     <EtymologySection entry={entry} onWordClick={onWordClick}/>

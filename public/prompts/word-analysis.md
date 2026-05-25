@@ -102,3 +102,7 @@ Với mỗi chữ quan trọng trong thành ngữ, phân tích thành phần xu�
 ## INPUT
 
 - Simplified: {{simp}}{{trad_line}}
+
+## Dữ liệu từ điển (ưu tiên tuyệt đối — không bịa đặt thông tin mâu thuẫn với phần này)
+
+{{dict_context}}
