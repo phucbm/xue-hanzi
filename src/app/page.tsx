@@ -1,13 +1,11 @@
 "use client";
 
 import {useCallback, useEffect, useRef, useState, useTransition} from "react";
-import {BreadcrumbItem, BreadcrumbPage,} from "@/components/ui/breadcrumb";
 import {AppLayout} from "@/components/layout/AppLayout";
 import {ContentArea} from "@/components/layout/content-area";
 import {getWordEntries} from "@/app/actions";
 import {useViewedWords} from "@/hooks/useViewedWords";
 import {type WordEntry, wordKey} from "@/core/types";
-import pkg from "../../package.json";
 
 export default function HomePage() {
   const [entries, setEntries]   = useState<WordEntry[]>([]);
@@ -48,6 +46,12 @@ export default function HomePage() {
     if (word) openWordRef.current(word, active);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const handleHome = useCallback(() => {
+    setEntries([]);
+    setActiveTab(undefined);
+    window.history.replaceState(null, "", "/");
+  }, []);
+
   const handleTabChange = useCallback(
     (tab: string) => {
       setActiveTab(tab);
@@ -60,22 +64,8 @@ export default function HomePage() {
     [entries],
   );
 
-  const currentWord = entries[0] ? wordKey(entries[0]) : undefined;
-
-  const breadcrumb = (
-    <BreadcrumbItem>
-      <BreadcrumbPage className="truncate">
-        {currentWord ? (
-          <span className="font-chinese font-medium">{currentWord}</span>
-        ) : (
-            `${pkg.title}`
-        )}
-      </BreadcrumbPage>
-    </BreadcrumbItem>
-  );
-
   return (
-    <AppLayout breadcrumb={breadcrumb} onSearchSelect={openWord}>
+    <AppLayout onHome={handleHome} onSearchSelect={openWord}>
       <ContentArea
         entries={entries}
         activeTab={activeTab}

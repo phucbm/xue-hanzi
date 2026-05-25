@@ -13,10 +13,6 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.3.0",
-    "@clerk/nextjs": "^7.2.3",
-    "@dnd-kit/core": "^6.3.1",
-    "@dnd-kit/sortable": "^10.0.0",
-    "@dnd-kit/utilities": "^3.2.2",
     "@gsap/react": "^2.1.2",
     "@libsql/client": "^0.17.2",
     "@serwist/next": "^9.5.7",

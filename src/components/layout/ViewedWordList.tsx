@@ -65,7 +65,6 @@ export function ViewedWordList({
               viewCount={w.viewCount}
               onSelect={() => onSelect(w.simp)}
               onRemove={() => onRemove(w.simp)}
-              showAddToGroup
             />
           </li>
         );

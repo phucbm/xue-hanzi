@@ -1,6 +1,5 @@
 import type {Metadata, Viewport} from "next";
 import {Noto_Serif, Noto_Serif_SC} from "next/font/google";
-import {ClerkProvider} from "@clerk/nextjs";
 import {SwAutoUpdate} from "@/components/SwAutoUpdate";
 import {PWATracker} from "@/components/PWATracker";
 import {Toaster} from "@/components/ui/sonner";
@@ -68,12 +67,10 @@ export default function RootLayout({
       className={`${notoSerif.variable} ${notoSerifSC.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground font-serif">
-        <ClerkProvider>
-          <SwAutoUpdate />
-          <PWATracker />
-          {children}
-          <Toaster />
-        </ClerkProvider>
+        <SwAutoUpdate />
+        <PWATracker />
+        {children}
+        <Toaster />
       </body>
     </html>
   );
