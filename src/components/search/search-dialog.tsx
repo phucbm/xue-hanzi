@@ -42,7 +42,6 @@ import { searchWords } from "@/app/actions"
 import { HanziInput } from "@/components/hanzi/HanziInput"
 import { RecentSearch } from "@/components/search/RecentSearch"
 import type { WordEntry } from "@/core/types"
-import type { ViewedWord } from "@/hooks/useViewedWords"
 
 type SearchMode = "text" | "draw"
 
@@ -50,7 +49,8 @@ interface SearchDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSelect: (simp: string) => void
-  viewedWords?: ViewedWord[]
+  recentWordLabels?: string[]
+  onSearchQuery?: (query: string) => void
 }
 
 function useIsDesktop() {
@@ -65,7 +65,7 @@ function useIsDesktop() {
   return isDesktop
 }
 
-export function SearchDialog({ open, onOpenChange, onSelect, viewedWords = [] }: SearchDialogProps) {
+export function SearchDialog({ open, onOpenChange, onSelect, recentWordLabels = [], onSearchQuery }: SearchDialogProps) {
   const isDesktop = useIsDesktop()
 
   const [mode, setMode]       = useState<SearchMode>("text")
@@ -109,9 +109,10 @@ export function SearchDialog({ open, onOpenChange, onSelect, viewedWords = [] }:
       handleSelect(q)
       return
     }
+    onSearchQuery?.(q)
     setResults(found)
     setSearched(true)
-  }, [query, handleSelect])
+  }, [query, handleSelect, onSearchQuery])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") runSearch()
@@ -175,7 +176,7 @@ export function SearchDialog({ open, onOpenChange, onSelect, viewedWords = [] }:
 
           <div className="flex-1 overflow-y-auto">
             {!searched && results.length === 0 && (
-              <RecentSearch words={viewedWords} onSelect={handleSelect} />
+              <RecentSearch labels={recentWordLabels} onSelect={handleSelect} />
             )}
             {searched && results.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8">

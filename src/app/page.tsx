@@ -4,7 +4,7 @@ import {useCallback, useEffect, useRef, useState, useTransition} from "react";
 import {AppLayout} from "@/components/layout/AppLayout";
 import {ContentArea} from "@/components/layout/content-area";
 import {getWordEntries} from "@/app/actions";
-import {useViewedWords} from "@/hooks/useViewedWords";
+import {useHistory} from "@/hooks/useHistory";
 import {type WordEntry, wordKey} from "@/core/types";
 
 export default function HomePage() {
@@ -12,8 +12,9 @@ export default function HomePage() {
   const [activeTab, setActiveTab] = useState<string | undefined>();
   const [isWordLoading, startDetailTransition] = useTransition();
 
-  // TODO: remove addViewedWord here once homepage panel no longer increments view count
-  const { addViewedWord } = useViewedWords();
+  const { history, addWordEntry, addSearchEntry, removeEntry, clearHistory } = useHistory();
+
+  const lastOpenedTabRef = useRef<string | null>(null);
 
   const openWord = useCallback(
     (simp: string, preferredTab?: string) => {
@@ -23,8 +24,9 @@ export default function HomePage() {
         setEntries(result);
         if (result[0]) {
           const key = preferredTab ?? wordKey(result[0]);
+          lastOpenedTabRef.current = key;
           setActiveTab(key);
-          addViewedWord(wordKey(result[0]));
+          addWordEntry(wordKey(result[0]));
           const url =
             key === wordKey(result[0])
               ? `?word=${encodeURIComponent(simp)}`
@@ -33,7 +35,7 @@ export default function HomePage() {
         }
       });
     },
-    [addViewedWord],
+    [addWordEntry],
   );
 
   const openWordRef = useRef(openWord);
@@ -45,6 +47,16 @@ export default function HomePage() {
     const active = params.get("active") ?? undefined;
     if (word) openWordRef.current(word, active);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Save viewed tab on tab switch (not on initial open — that's handled in openWord)
+  useEffect(() => {
+    if (!activeTab) return;
+    if (activeTab === lastOpenedTabRef.current) {
+      lastOpenedTabRef.current = null;
+      return;
+    }
+    addWordEntry(activeTab);
+  }, [activeTab, addWordEntry]);
 
   const handleHome = useCallback(() => {
     setEntries([]);
@@ -65,7 +77,14 @@ export default function HomePage() {
   );
 
   return (
-    <AppLayout onHome={handleHome} onSearchSelect={openWord}>
+    <AppLayout
+      onHome={handleHome}
+      onSearchSelect={openWord}
+      onSearchQuery={addSearchEntry}
+      history={history}
+      onHistoryRemove={removeEntry}
+      onHistoryClear={clearHistory}
+    >
       <ContentArea
         entries={entries}
         activeTab={activeTab}

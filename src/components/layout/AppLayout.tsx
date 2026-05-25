@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { SearchIcon, BookOpenIcon } from "lucide-react";
 import { SearchDialog } from "@/components/search/search-dialog";
 import { RightSheet } from "@/components/layout/right-sheet";
-import { useViewedWords } from "@/hooks/useViewedWords";
+import type { HistoryEntry } from "@/core/types";
 import pkg from "../../../package.json";
 
 const GITHUB_URL = "https://github.com/phucbm/hieu-chu-han";
@@ -31,17 +31,31 @@ function DiscordIcon({ className }: { className?: string }) {
 }
 
 interface AppLayoutProps {
-  /** Called when logo is clicked — use to reset page state on same-route navigation. */
   onHome?: () => void;
   onSearchSelect?: (simp: string) => void;
+  onSearchQuery?: (query: string) => void;
+  history?: HistoryEntry[];
+  onHistoryRemove?: (id: string) => void;
+  onHistoryClear?: () => void;
   children: React.ReactNode;
 }
 
-export function AppLayout({ onHome, onSearchSelect, children }: AppLayoutProps) {
+export function AppLayout({
+  onHome,
+  onSearchSelect,
+  onSearchQuery,
+  history = [],
+  onHistoryRemove,
+  onHistoryClear,
+  children,
+}: AppLayoutProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
 
-  const { viewedWords, removeViewedWord } = useViewedWords();
+  const recentWordLabels = history
+    .filter((e) => e.type === "word")
+    .slice(0, 5)
+    .map((e) => e.label);
 
   function handleSearchSelect(simp: string) {
     setSearchOpen(false);
@@ -167,18 +181,17 @@ export function AppLayout({ onHome, onSearchSelect, children }: AppLayoutProps) 
         open={searchOpen}
         onOpenChange={setSearchOpen}
         onSelect={handleSearchSelect}
-        viewedWords={viewedWords}
+        recentWordLabels={recentWordLabels}
+        onSearchQuery={onSearchQuery}
       />
 
       <RightSheet
         open={historyOpen}
         onOpenChange={setHistoryOpen}
-        viewedWords={viewedWords}
-        onSelect={(simp) => {
-          handleSearchSelect(simp);
-          setHistoryOpen(false);
-        }}
-        onRemove={removeViewedWord}
+        history={history}
+        onSelect={handleSearchSelect}
+        onRemove={onHistoryRemove ?? (() => {})}
+        onClear={onHistoryClear ?? (() => {})}
       />
     </div>
   );

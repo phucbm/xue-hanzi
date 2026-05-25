@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState, useTransition, useRef } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ContentArea } from "@/components/layout/content-area";
 import { getWordEntries } from "@/app/actions";
-import { useViewedWords } from "@/hooks/useViewedWords";
+import { useHistory } from "@/hooks/useHistory";
 import { wordKey, type WordEntry } from "@/core/types";
 
 interface WordDetailPageProps {
@@ -16,7 +16,7 @@ export function WordDetailPage({ simp }: WordDetailPageProps) {
   const [activeTab, setActiveTab] = useState<string | undefined>();
   const [, startTransition] = useTransition();
 
-  const { addViewedWord } = useViewedWords();
+  const { history, addWordEntry, addSearchEntry, removeEntry, clearHistory } = useHistory();
 
   useEffect(() => {
     startTransition(async () => {
@@ -30,8 +30,8 @@ export function WordDetailPage({ simp }: WordDetailPageProps) {
   useEffect(() => {
     if (hasTrackedRef.current || entries.length === 0) return;
     hasTrackedRef.current = true;
-    addViewedWord(wordKey(entries[0]));
-  }, [entries, addViewedWord]);
+    addWordEntry(wordKey(entries[0]));
+  }, [entries, addWordEntry]);
 
   const openWord = useCallback((newSimp: string) => {
     window.location.href = `/word/${encodeURIComponent(newSimp)}`;
@@ -42,7 +42,12 @@ export function WordDetailPage({ simp }: WordDetailPageProps) {
   }, []);
 
   return (
-    <AppLayout>
+    <AppLayout
+      history={history}
+      onSearchQuery={addSearchEntry}
+      onHistoryRemove={removeEntry}
+      onHistoryClear={clearHistory}
+    >
       <ContentArea
         entries={entries}
         activeTab={activeTab}

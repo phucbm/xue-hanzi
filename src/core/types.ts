@@ -82,11 +82,9 @@ export interface WordSummary {
   en: string;
 }
 
-// A search history entry stored in localStorage
-export interface HistoryItem {
-  simp: string;
-  trad: string;
-  pinyin: string;
-  vi: string;
+export interface HistoryEntry {
+  id: string;
+  type: 'search' | 'word';
+  label: string;
   timestamp: number;
 }

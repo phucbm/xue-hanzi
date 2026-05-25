@@ -1,16 +1,5 @@
 "use client";
 
-/**
- * WordRow — Generic word list row.
- * Used in SearchBox (search results) and ViewedWordList (history with view count).
- *
- * Layout:
- *   Left:   large Chinese character for quick visual ID
- *   Middle: row 1 = simp + trad (if diff)
- *           row 2 = pinyin · vi/en  [👁 N  if viewCount provided]
- *   Right:  optional X remove button, visible on hover
- */
-
 import { X, Eye } from "lucide-react";
 import type { WordEntry } from "@/core/types";
 
