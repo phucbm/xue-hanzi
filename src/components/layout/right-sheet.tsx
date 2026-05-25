@@ -7,7 +7,6 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Button } from "@/components/ui/button"
 import { HistoryList } from "@/components/layout/HistoryList"
 import type { HistoryEntry } from "@/core/types"
 
@@ -32,18 +31,8 @@ export function RightSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-80 p-0 flex flex-col gap-0 overflow-hidden">
 
-        <SheetHeader className="px-4 py-3! border-b shrink-0 flex-row items-center justify-between">
+        <SheetHeader className="px-4 py-3! border-b shrink-0">
           <SheetTitle className="text-sm font-semibold">Lịch sử</SheetTitle>
-          {history.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 text-xs text-muted-foreground px-2"
-              onClick={onClear}
-            >
-              Xóa tất cả
-            </Button>
-          )}
         </SheetHeader>
 
         <ScrollArea className="flex-1 min-h-0">
@@ -55,6 +44,7 @@ export function RightSheet({
                 onOpenChange(false)
               }}
               onRemove={onRemove}
+              onClear={onClear}
             />
           </div>
         </ScrollArea>

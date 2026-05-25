@@ -1,18 +1,17 @@
 "use client";
 
-import { X, Eye } from "lucide-react";
+import { X } from "lucide-react";
 import type { WordEntry } from "@/core/types";
 
 interface WordRowProps {
   entry: WordEntry;
   onSelect: () => void;
-  /** When provided, shows 👁 N in row 2 */
-  viewCount?: number;
-  /** When provided, shows an X button on row hover */
+  /** Extra content rendered below row 2 (e.g. time ago + view count) */
+  meta?: React.ReactNode;
   onRemove?: () => void;
 }
 
-export function WordRow({ entry, onSelect, viewCount, onRemove }: WordRowProps) {
+export function WordRow({ entry, onSelect, meta, onRemove }: WordRowProps) {
   const { simp, trad, pinyin, definitionVi, definitionsEn, key } = entry;
   const showTrad = trad && trad !== simp;
   // Trad-only entries: show trad first since that's the lookup key
@@ -46,7 +45,7 @@ export function WordRow({ entry, onSelect, viewCount, onRemove }: WordRowProps) 
               </span>
             )}
           </span>
-          {/* Row 2: pinyin · definition · view count */}
+          {/* Row 2: pinyin · definition */}
           <span className="flex items-center gap-1.5 min-w-0 leading-tight">
             {pinyin && (
               <span className="text-xs text-muted-foreground shrink-0">
@@ -56,13 +55,8 @@ export function WordRow({ entry, onSelect, viewCount, onRemove }: WordRowProps) 
             {definition && (
               <span className="text-xs truncate flex-1">{definition}</span>
             )}
-            {viewCount !== undefined && (
-              <span className="flex items-center gap-0.5 text-xs text-muted-foreground shrink-0 ml-auto">
-                <Eye className="h-3 w-3" />
-                {viewCount}
-              </span>
-            )}
           </span>
+          {meta}
         </span>
       </button>
 

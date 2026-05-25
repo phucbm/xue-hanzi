@@ -15,7 +15,11 @@ function readStorage(): HistoryEntry[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    return JSON.parse(raw) as HistoryEntry[];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (JSON.parse(raw) as any[]).map((e) => ({
+      ...e,
+      viewCount: typeof e.viewCount === "number" ? e.viewCount : 1,
+    })) as HistoryEntry[];
   } catch {
     return [];
   }
@@ -43,10 +47,10 @@ function migrate(existing: HistoryEntry[]): HistoryEntry[] {
         type: "word" as const,
         label: w.simp as string,
         timestamp: w.lastViewedAt ? new Date(w.lastViewedAt).getTime() : Date.now(),
+        viewCount: (w.viewCount as number | undefined) ?? 1,
       }))
-      .sort((a, b) => a.timestamp - b.timestamp); // oldest first, will be merged before front
+      .sort((a, b) => a.timestamp - b.timestamp);
     const merged = [...converted, ...existing];
-    // dedup: keep newest of same type+label
     const seen = new Map<string, HistoryEntry>();
     for (const e of merged) {
       const key = `${e.type}:${e.label}`;
@@ -77,9 +81,16 @@ export function useHistory() {
     const trimmed = label.trim();
     if (!trimmed) return;
     setHistory((prev) => {
+      const existing = prev.find((e) => e.type === type && e.label === trimmed);
       const filtered = prev.filter((e) => !(e.type === type && e.label === trimmed));
       const next: HistoryEntry[] = [
-        { id: genId(), type, label: trimmed, timestamp: Date.now() },
+        {
+          id: existing?.id ?? genId(),
+          type,
+          label: trimmed,
+          timestamp: Date.now(),
+          viewCount: (existing?.viewCount ?? 0) + 1,
+        },
         ...filtered,
       ].slice(0, MAX);
       writeStorage(next);

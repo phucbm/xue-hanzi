@@ -87,4 +87,5 @@ export interface HistoryEntry {
   type: 'search' | 'word';
   label: string;
   timestamp: number;
+  viewCount: number;
 }

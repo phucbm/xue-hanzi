@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { SearchIcon, BookOpenIcon } from "lucide-react";
+import { SearchIcon, History } from "lucide-react";
 import { SearchDialog } from "@/components/search/search-dialog";
 import { RightSheet } from "@/components/layout/right-sheet";
 import type { HistoryEntry } from "@/core/types";
@@ -51,6 +51,17 @@ export function AppLayout({
 }: AppLayoutProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "/") {
+        e.preventDefault();
+        setHistoryOpen((v) => !v);
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, []);
 
   const recentWordLabels = history
     .filter((e) => e.type === "word")
@@ -120,15 +131,26 @@ export function AppLayout({
           <SearchIcon className="h-4 w-4" />
         </Button>
 
-        {/* History */}
+        {/* History — label + kbd on desktop, icon-only on mobile */}
         <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1.5 text-muted-foreground font-normal hidden sm:flex"
           onClick={() => setHistoryOpen(true)}
           aria-label="Lịch sử"
         >
-          <BookOpenIcon className="h-4 w-4" />
+          <History className="h-3.5 w-3.5" />
+          <span>Lịch sử</span>
+          <kbd className="ml-1 text-xs border rounded px-1 py-0.5 bg-muted leading-none">⌘/</kbd>
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 sm:hidden"
+          onClick={() => setHistoryOpen(true)}
+          aria-label="Lịch sử"
+        >
+          <History className="h-4 w-4" />
         </Button>
       </header>
 
