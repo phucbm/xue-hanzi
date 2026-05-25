@@ -20,7 +20,6 @@ import {Button} from "@/components/ui/button";
 import {CopyShareButton} from "@/components/shared/CopyShareButton";
 import {ReportIssueDialog} from "@/components/ReportIssueDialog";
 import {WordAIExplanation} from "@/components/word/WordAIExplanation";
-import {AddToGroupButton} from "@/components/notebook/AddToGroupButton";
 import {Braces, Flag} from "lucide-react";
 
 interface WordTabContentProps {
@@ -39,7 +38,6 @@ export function WordTabContent({ entry, onWordClick }: WordTabContentProps) {
 
                 {/* Action buttons — top right */}
                 <div className="action-buttons flex justify-end items-center gap-0.5">
-                    <AddToGroupButton simp={wordKey(entry)} compact />
                     <ReportIssueDialog url={typeof window !== "undefined" ? window.location.href : undefined}>
                         <Button
                             type="button"

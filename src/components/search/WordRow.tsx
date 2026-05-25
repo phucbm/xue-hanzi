@@ -13,7 +13,6 @@
 
 import { X, Eye } from "lucide-react";
 import type { WordEntry } from "@/core/types";
-import { AddToGroupButton } from "@/components/notebook/AddToGroupButton";
 
 interface WordRowProps {
   entry: WordEntry;
@@ -22,11 +21,9 @@ interface WordRowProps {
   viewCount?: number;
   /** When provided, shows an X button on row hover */
   onRemove?: () => void;
-  /** When provided, shows an AddToGroupButton on hover */
-  showAddToGroup?: boolean;
 }
 
-export function WordRow({ entry, onSelect, viewCount, onRemove, showAddToGroup = false }: WordRowProps) {
+export function WordRow({ entry, onSelect, viewCount, onRemove }: WordRowProps) {
   const { simp, trad, pinyin, definitionVi, definitionsEn, key } = entry;
   const showTrad = trad && trad !== simp;
   // Trad-only entries: show trad first since that's the lookup key
@@ -81,13 +78,8 @@ export function WordRow({ entry, onSelect, viewCount, onRemove, showAddToGroup =
       </button>
 
       {/* Action buttons — visible on group hover */}
-      {(showAddToGroup || onRemove) && (
+      {onRemove && (
         <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-          {showAddToGroup && (
-            <span onMouseDown={(e) => e.preventDefault()}>
-              <AddToGroupButton simp={entry.simp} compact />
-            </span>
-          )}
           {onRemove && (
             <button
               type="button"

@@ -1,9 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
-import { useAuth } from "@clerk/nextjs";
-import { SignUpButton } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import {
@@ -16,11 +14,10 @@ import { streamWordAnalysis } from "@/lib/groq";
 import {
   getAiExplanation,
   saveAiExplanation,
-  getAiUsageStatus,
   type AiExplanation,
 } from "@/app/actions/aiExplanation";
 import type { WordEntry } from "@/core/types";
-import { GUEST_DAILY_LIMIT, USER_DAILY_LIMIT } from "@/lib/aiConstants";
+import { GUEST_DAILY_LIMIT } from "@/lib/aiConstants";
 import { trackAiCall } from "@/core/pwa";
 import { Check, ChevronDown, Copy, ExternalLink, Loader2, Sparkles } from "lucide-react";
 import { MovingBorder } from "@/components/phucbm/moving-border";
@@ -81,54 +78,31 @@ interface WordAIExplanationProps {
 
 type Status = "idle" | "loading" | "streaming" | "done" | "error";
 
-interface UsageStatus {
-  remaining: number;
-  limit: number;
-  isSignedIn: boolean;
-}
-
 export function WordAIExplanation({ simp, trad, wordEntry }: WordAIExplanationProps) {
-  const { isLoaded, isSignedIn, userId } = useAuth();
-
   const [status, setStatus] = useState<Status>("idle");
   const [streamContent, setStreamContent] = useState("");
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [promptCopied, setPromptCopied] = useState(false);
   const [cached, setCached] = useState<AiExplanation | null | undefined>(undefined);
-  const [usage, setUsage] = useState<UsageStatus | null>(null);
-
-  // Guest call count tracked in-memory per session (soft gate, server is backstop)
   const [guestCalls, setGuestCalls] = useState(0);
 
-  const refreshUsage = useCallback(async () => {
-    const u = await getAiUsageStatus();
-    setUsage(u);
-  }, []);
+  const remaining = GUEST_DAILY_LIMIT - guestCalls;
+  const isLimited = remaining <= 0;
+
+  const dictContext = wordEntry ? buildDictContext(wordEntry) : undefined;
 
   useEffect(() => {
     setCached(undefined);
     setStatus("idle");
     setStreamContent("");
     setError("");
-
     getAiExplanation(simp).then(setCached);
   }, [simp]);
-
-  useEffect(() => {
-    if (isLoaded) refreshUsage();
-  }, [isLoaded, refreshUsage]);
 
   const isRunning = status === "loading" || status === "streaming";
   const content = isRunning ? streamContent : (cached?.content ?? streamContent);
   const hasContent = !!content;
-
-  const guestRemaining = GUEST_DAILY_LIMIT - guestCalls;
-  const remaining = isSignedIn ? (usage?.remaining ?? null) : guestRemaining;
-  const limit = isSignedIn ? USER_DAILY_LIMIT : GUEST_DAILY_LIMIT;
-  const isLimited = remaining !== null && remaining <= 0;
-
-  const dictContext = wordEntry ? buildDictContext(wordEntry) : undefined;
 
   async function handleCopyPrompt() {
     const prompt = await buildPrompt(simp, trad, dictContext);
@@ -156,7 +130,7 @@ export function WordAIExplanation({ simp, trad, wordEntry }: WordAIExplanationPr
   }
 
   async function handleGenerate() {
-    if (!isSignedIn && guestRemaining <= 0) {
+    if (isLimited) {
       setError(`Đã dùng hết ${GUEST_DAILY_LIMIT} lượt hôm nay.`);
       return;
     }
@@ -168,8 +142,7 @@ export function WordAIExplanation({ simp, trad, wordEntry }: WordAIExplanationPr
     try {
       const { model: aiModel, stream } = await streamWordAnalysis(simp, trad, dictContext);
       setStatus("streaming");
-
-      if (!isSignedIn) setGuestCalls((n) => n + 1);
+      setGuestCalls((n) => n + 1);
 
       let full = "";
       for await (const chunk of stream) {
@@ -180,13 +153,8 @@ export function WordAIExplanation({ simp, trad, wordEntry }: WordAIExplanationPr
       await saveAiExplanation(simp, full, aiModel);
       void trackAiCall();
 
-      // Refresh cached explanation and usage
-      const [fresh, freshUsage] = await Promise.all([
-        getAiExplanation(simp),
-        getAiUsageStatus(),
-      ]);
+      const fresh = await getAiExplanation(simp);
       setCached(fresh);
-      setUsage(freshUsage);
 
       setStatus("done");
       setStreamContent("");
@@ -209,7 +177,7 @@ export function WordAIExplanation({ simp, trad, wordEntry }: WordAIExplanationPr
         <div className="flex items-center gap-0.5">
           <div className="flex items-center gap-1.5">
             {!isRunning && (
-              <AiCreditBadge remaining={remaining} limit={limit} />
+              <AiCreditBadge remaining={remaining} limit={GUEST_DAILY_LIMIT} />
             )}
             {/* mobile */}
             <Button
@@ -292,17 +260,10 @@ export function WordAIExplanation({ simp, trad, wordEntry }: WordAIExplanationPr
         <p className="text-sm text-destructive">{error}</p>
       )}
 
-      {isLimited && !isSignedIn && (
-        <div className="flex items-center justify-between rounded-md border border-dashed px-3 py-2 text-sm">
-          <span className="text-muted-foreground">
-            Tạo tài khoản để dùng thêm {USER_DAILY_LIMIT} lượt mỗi ngày
-          </span>
-          <SignUpButton mode="redirect">
-            <Button variant="default" size="sm" className="text-xs h-7 ml-3 shrink-0">
-              Đăng ký
-            </Button>
-          </SignUpButton>
-        </div>
+      {isLimited && (
+        <p className="text-sm text-muted-foreground">
+          Đã dùng hết {GUEST_DAILY_LIMIT} lượt AI hôm nay. Vui lòng thử lại sau 24 giờ.
+        </p>
       )}
 
       {hasContent && (
@@ -329,23 +290,23 @@ export function WordAIExplanation({ simp, trad, wordEntry }: WordAIExplanationPr
                   {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                 </Button>
               )}
-            <div className="prose prose-sm prose-neutral max-w-none
-              prose-headings:font-semibold
-              prose-h2:text-base prose-h2:mt-0
-              prose-h3:text-sm prose-h3:mt-3 prose-h3:mb-1
-              prose-p:my-1 prose-p:text-sm
-              prose-li:text-sm prose-li:my-0
-              prose-ul:my-1 prose-ul:pl-4
-              prose-blockquote:text-sm prose-blockquote:not-italic prose-blockquote:border-l-2 prose-blockquote:border-border prose-blockquote:pl-3 prose-blockquote:text-muted-foreground
-              prose-strong:font-semibold
-              prose-a:text-primary prose-a:no-underline hover:prose-a:no-underline">
-              <ReactMarkdown>{content}</ReactMarkdown>
-            </div>
+              <div className="prose prose-sm prose-neutral max-w-none
+                prose-headings:font-semibold
+                prose-h2:text-base prose-h2:mt-0
+                prose-h3:text-sm prose-h3:mt-3 prose-h3:mb-1
+                prose-p:my-1 prose-p:text-sm
+                prose-li:text-sm prose-li:my-0
+                prose-ul:my-1 prose-ul:pl-4
+                prose-blockquote:text-sm prose-blockquote:not-italic prose-blockquote:border-l-2 prose-blockquote:border-border prose-blockquote:pl-3 prose-blockquote:text-muted-foreground
+                prose-strong:font-semibold
+                prose-a:text-primary prose-a:no-underline hover:prose-a:no-underline">
+                <ReactMarkdown>{content}</ReactMarkdown>
+              </div>
             </div>
             <div className="flex items-center justify-between border-t border-border pt-2">
               <p className="text-xs text-muted-foreground">
                 AI{cached && !isRunning
-                  ? ` · ${relativeTime(cached.generatedAt)} · ${cached.userId === userId ? "bởi bạn" : "bởi một bạn học khác"} · ${cached.model}`
+                  ? ` · ${relativeTime(cached.generatedAt)} · bởi cộng đồng · ${cached.model}`
                   : isRunning ? ` · ${AI_PROVIDER}` : ""} - nội dung được tạo bởi AI, có thể không chính xác và chỉ để tham khảo.
               </p>
             </div>
