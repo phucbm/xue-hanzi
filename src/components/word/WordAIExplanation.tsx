@@ -5,6 +5,13 @@ import ReactMarkdown from "react-markdown";
 import { useAuth } from "@clerk/nextjs";
 import { SignUpButton } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
+import { ButtonGroup } from "@/components/ui/button-group";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { streamWordAnalysis } from "@/lib/groq";
 import {
   getAiExplanation,
@@ -14,10 +21,24 @@ import {
 } from "@/app/actions/aiExplanation";
 import { GUEST_DAILY_LIMIT, USER_DAILY_LIMIT } from "@/lib/aiConstants";
 import { trackAiCall } from "@/core/pwa";
-import { BotMessageSquare, Check, Copy, Loader2 } from "lucide-react";
+import { Check, ChevronDown, Copy, ExternalLink, Loader2, Sparkles } from "lucide-react";
 import { MovingBorder } from "@/components/phucbm/moving-border";
 import { AiCreditBadge } from "@/components/shared/AiCreditBadge";
 import { Skeleton } from "@/components/ui/skeleton";
+
+let _promptTemplate: string | null = null;
+
+async function buildPrompt(simp: string, trad?: string): Promise<string> {
+  if (!_promptTemplate) {
+    const res = await fetch("/prompts/word-analysis.md");
+    _promptTemplate = await res.text();
+  }
+  const tradLine = trad && trad !== simp ? `\n- Traditional: ${trad}` : "";
+  return _promptTemplate
+    .replace(/\{\{simp\}\}/g, simp)
+    .replace(/\{\{trad\}\}/g, trad ?? simp)
+    .replace(/\{\{trad_line\}\}/g, tradLine);
+}
 
 function relativeTime(iso: string): string {
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
@@ -46,6 +67,7 @@ export function WordAIExplanation({ simp, trad }: WordAIExplanationProps) {
   const [streamContent, setStreamContent] = useState("");
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [promptCopied, setPromptCopied] = useState(false);
   const [cached, setCached] = useState<AiExplanation | null | undefined>(undefined);
   const [usage, setUsage] = useState<UsageStatus | null>(null);
 
@@ -78,6 +100,31 @@ export function WordAIExplanation({ simp, trad }: WordAIExplanationProps) {
   const remaining = isSignedIn ? (usage?.remaining ?? null) : guestRemaining;
   const limit = isSignedIn ? USER_DAILY_LIMIT : GUEST_DAILY_LIMIT;
   const isLimited = remaining !== null && remaining <= 0;
+
+  async function handleCopyPrompt() {
+    const prompt = await buildPrompt(simp, trad);
+    await navigator.clipboard.writeText(prompt);
+    setPromptCopied(true);
+    setTimeout(() => setPromptCopied(false), 2000);
+  }
+
+  async function handleOpenChatGPT() {
+    const prompt = await buildPrompt(simp, trad);
+    await navigator.clipboard.writeText(prompt);
+    window.open("https://chatgpt.com/", "_blank");
+  }
+
+  async function handleOpenClaude() {
+    const prompt = await buildPrompt(simp, trad);
+    await navigator.clipboard.writeText(prompt);
+    window.open("https://claude.ai/new", "_blank");
+  }
+
+  async function handleOpenGemini() {
+    const prompt = await buildPrompt(simp, trad);
+    await navigator.clipboard.writeText(prompt);
+    window.open("https://gemini.google.com/app", "_blank");
+  }
 
   async function handleGenerate() {
     if (!isSignedIn && guestRemaining <= 0) {
@@ -135,6 +182,49 @@ export function WordAIExplanation({ simp, trad }: WordAIExplanationProps) {
             {!isRunning && (
               <AiCreditBadge remaining={remaining} limit={limit} />
             )}
+            {/* mobile */}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleCopyPrompt}
+              className="md:hidden gap-1.5 text-xs h-7 text-muted-foreground"
+            >
+              {promptCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+              Prompt
+            </Button>
+            {/* desktop */}
+            <ButtonGroup className="hidden md:flex">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleCopyPrompt}
+                className="gap-1.5 text-xs h-7 text-muted-foreground"
+              >
+                {promptCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                {promptCopied ? "Đã sao chép" : "Copy prompt"}
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger className="inline-flex items-center justify-center border border-input bg-background hover:bg-accent hover:text-accent-foreground h-7 px-2 text-muted-foreground transition-colors">
+                  <ChevronDown className="h-3 w-3" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={handleOpenChatGPT}>
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    ChatGPT
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleOpenClaude}>
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Claude.ai
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleOpenGemini}>
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Gemini
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </ButtonGroup>
             <Button
               type="button"
               variant="outline"
@@ -146,9 +236,14 @@ export function WordAIExplanation({ simp, trad }: WordAIExplanationProps) {
               {isRunning ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
-                <BotMessageSquare className="h-3.5 w-3.5" />
+                <Sparkles className="h-3.5 w-3.5" />
               )}
-              {isRunning ? "Đang xử lý..." : cached ? "Tạo lại" : "Phân tích"}
+              <span className="hidden md:inline">
+                {isRunning ? "Đang xử lý..." : cached ? "Tạo lại" : "Giải thích"}
+              </span>
+              <span className="md:hidden">
+                {isRunning ? "AI..." : "AI"}
+              </span>
             </Button>
           </div>
         </div>
