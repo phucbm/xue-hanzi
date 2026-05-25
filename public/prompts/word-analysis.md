@@ -88,6 +88,7 @@ Với mỗi chữ quan trọng trong thành ngữ, phân tích thành phần xu�
 
 ## GENERAL RULES
 
+- Never output the case labels ("CASE 1", "CASE 2", "CASE 3", or their titles) in the response. The format templates above are internal instructions only.
 - Always output in Vietnamese only.
 - Always apply the character linking rule to every Han character or word without exception.
 - Pinyin must always include tone marks (ā á ǎ à, etc.).
