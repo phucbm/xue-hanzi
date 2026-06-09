@@ -7,41 +7,34 @@ export type AiModel = {
 };
 
 export const AI_MODELS: AiModel[] = [
-  // https://openrouter.ai/google/gemini-2.0-flash-exp:free
+  // https://openrouter.ai/openai/gpt-oss-120b:free
   {
-    id: "google/gemini-2.0-flash-exp:free",
-    label: "Gemini 2.0 Flash",
-    provider: "Google",
-    contextWindow: 1_048_576,
+    id: "openai/gpt-oss-120b:free",
+    label: "gpt-oss-120b",
+    provider: "OpenAI",
+    contextWindow: 131_000,
     default: true,
   },
-  // https://openrouter.ai/qwen/qwen3-235b-a22b:free
+  // https://openrouter.ai/poolside/laguna-m.1:free
   {
-    id: "qwen/qwen3-235b-a22b:free",
-    label: "Qwen3 235B",
-    provider: "Qwen",
-    contextWindow: 131_072,
+    id: "poolside/laguna-m.1:free",
+    label: "Laguna M.1",
+    provider: "Poolside",
+    contextWindow: 262_000,
   },
-  // https://openrouter.ai/meta-llama/llama-3.3-70b-instruct:free
+  // https://openrouter.ai/nvidia/nemotron-3-ultra-550b-a55b:free
   {
-    id: "meta-llama/llama-3.3-70b-instruct:free",
-    label: "Llama 3.3 70B",
-    provider: "Meta",
-    contextWindow: 131_072,
+    id: "nvidia/nemotron-3-ultra-550b-a55b:free",
+    label: "Nemotron 3 Ultra",
+    provider: "NVIDIA",
+    contextWindow: 1_000_000,
   },
-  // https://openrouter.ai/deepseek/deepseek-r1-0528:free
+  // https://openrouter.ai/nvidia/nemotron-3.5-content-safety:free
   {
-    id: "deepseek/deepseek-r1-0528:free",
-    label: "DeepSeek R1 0528",
-    provider: "DeepSeek",
-    contextWindow: 163_840,
-  },
-  // https://openrouter.ai/mistralai/mistral-nemo:free
-  {
-    id: "mistralai/mistral-nemo:free",
-    label: "Mistral Nemo",
-    provider: "Mistral",
-    contextWindow: 131_072,
+    id: "nvidia/nemotron-3.5-content-safety:free",
+    label: "Nemotron 3.5 Content Safety",
+    provider: "NVIDIA",
+    contextWindow: 128_000,
   },
 ];
 
