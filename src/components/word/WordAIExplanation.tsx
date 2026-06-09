@@ -22,11 +22,13 @@ import {
 import type { WordEntry } from "@/core/types";
 import { trackAiCall } from "@/core/pwa";
 import { Check, ChevronDown, Copy, ExternalLink, Loader2, Sparkles } from "lucide-react";
+import { IconAlertTriangle } from "@tabler/icons-react";
 import { MovingBorder } from "@/components/phucbm/moving-border";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AI_MODELS, getDefaultModel, getModelById, type AiModel } from "@/lib/aiModels";
 
 const AI_MODEL_STORAGE_KEY = "hch_selected_ai_model";
+const AI_MODEL_ERRORS_KEY = "hch_ai_model_errors";
 
 function getSavedModel(): AiModel {
   if (typeof window === "undefined") return getDefaultModel();
@@ -36,6 +38,27 @@ function getSavedModel(): AiModel {
     if (model) return model;
   }
   return getDefaultModel();
+}
+
+function getModelErrors(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  try {
+    return JSON.parse(localStorage.getItem(AI_MODEL_ERRORS_KEY) ?? "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveModelError(modelId: string, message: string) {
+  const errors = getModelErrors();
+  errors[modelId] = message;
+  localStorage.setItem(AI_MODEL_ERRORS_KEY, JSON.stringify(errors));
+}
+
+function clearModelError(modelId: string) {
+  const errors = getModelErrors();
+  delete errors[modelId];
+  localStorage.setItem(AI_MODEL_ERRORS_KEY, JSON.stringify(errors));
 }
 
 let _promptTemplate: string | null = null;
@@ -106,6 +129,7 @@ export function WordAIExplanation({ simp, trad, wordEntry, recentWords }: WordAI
   const [promptCopied, setPromptCopied] = useState(false);
   const [cached, setCached] = useState<AiExplanation | null | undefined>(undefined);
   const [selectedModel, setSelectedModel] = useState<AiModel>(getSavedModel);
+  const [modelErrors, setModelErrors] = useState<Record<string, string>>(getModelErrors);
 
   function handleSelectModel(m: AiModel) {
     setSelectedModel(m);
@@ -169,14 +193,20 @@ export function WordAIExplanation({ simp, trad, wordEntry, recentWords }: WordAI
       await saveAiExplanation(simp, full, aiModel);
       void trackAiCall();
 
+      clearModelError(selectedModel.id);
+      setModelErrors(getModelErrors());
+
       const fresh = await getAiExplanation(simp);
       setCached(fresh);
 
       setStatus("done");
       setStreamContent("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Đã xảy ra lỗi không xác định.");
+      const msg = err instanceof Error ? err.message : "Đã xảy ra lỗi không xác định.";
+      setError(msg);
       setStatus("error");
+      saveModelError(selectedModel.id, msg);
+      setModelErrors(getModelErrors());
     }
   }
 
@@ -264,7 +294,7 @@ export function WordAIExplanation({ simp, trad, wordEntry, recentWords }: WordAI
               >
                 <ChevronDown className="h-3 w-3" />
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+              <DropdownMenuContent align="end" className="w-64">
                 {Array.from(new Set(AI_MODELS.map((m) => m.provider))).map((provider, idx) => (
                   <React.Fragment key={provider}>
                     {idx > 0 && <DropdownMenuSeparator />}
@@ -275,8 +305,14 @@ export function WordAIExplanation({ simp, trad, wordEntry, recentWords }: WordAI
                         key={m.id}
                         onClick={() => handleSelectModel(m)}
                         className="flex items-center justify-between gap-4"
+                        title={modelErrors[m.id] ?? undefined}
                       >
-                        <span className="font-medium text-xs">{m.label}</span>
+                        <span className="flex items-center gap-1.5 font-medium text-xs">
+                          {modelErrors[m.id] && (
+                            <IconAlertTriangle className="h-3.5 w-3.5 shrink-0 text-destructive" />
+                          )}
+                          {m.label}
+                        </span>
                         {m.id === selectedModel.id && <Check className="h-3.5 w-3.5 shrink-0" />}
                       </DropdownMenuItem>
                     ))}
