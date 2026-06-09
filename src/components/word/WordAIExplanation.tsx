@@ -24,7 +24,19 @@ import { trackAiCall } from "@/core/pwa";
 import { Check, ChevronDown, Copy, ExternalLink, Loader2, Sparkles } from "lucide-react";
 import { MovingBorder } from "@/components/phucbm/moving-border";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AI_MODELS, getDefaultModel, type AiModel } from "@/lib/aiModels";
+import { AI_MODELS, getDefaultModel, getModelById, type AiModel } from "@/lib/aiModels";
+
+const AI_MODEL_STORAGE_KEY = "hch_selected_ai_model";
+
+function getSavedModel(): AiModel {
+  if (typeof window === "undefined") return getDefaultModel();
+  const saved = localStorage.getItem(AI_MODEL_STORAGE_KEY);
+  if (saved) {
+    const model = getModelById(saved);
+    if (model) return model;
+  }
+  return getDefaultModel();
+}
 
 let _promptTemplate: string | null = null;
 
@@ -93,7 +105,12 @@ export function WordAIExplanation({ simp, trad, wordEntry, recentWords }: WordAI
   const [copied, setCopied] = useState(false);
   const [promptCopied, setPromptCopied] = useState(false);
   const [cached, setCached] = useState<AiExplanation | null | undefined>(undefined);
-  const [selectedModel, setSelectedModel] = useState<AiModel>(getDefaultModel());
+  const [selectedModel, setSelectedModel] = useState<AiModel>(getSavedModel);
+
+  function handleSelectModel(m: AiModel) {
+    setSelectedModel(m);
+    localStorage.setItem(AI_MODEL_STORAGE_KEY, m.id);
+  }
 
   const dictContext = wordEntry ? buildDictContext(wordEntry) : undefined;
 
@@ -256,7 +273,7 @@ export function WordAIExplanation({ simp, trad, wordEntry, recentWords }: WordAI
                     {AI_MODELS.filter((m) => m.provider === provider).map((m) => (
                       <DropdownMenuItem
                         key={m.id}
-                        onClick={() => setSelectedModel(m)}
+                        onClick={() => handleSelectModel(m)}
                         className="flex items-center justify-between gap-4"
                       >
                         <span className="font-medium text-xs">{m.label}</span>
