@@ -16,6 +16,7 @@
     "@gsap/react": "^2.1.2",
     "@libsql/client": "^0.17.2",
     "@serwist/next": "^9.5.7",
+    "@tabler/icons-react": "^3.44.0",
     "@tailwindcss/typography": "^0.5.19",
     "chinese-lexicon": "^1.0.43",
     "class-variance-authority": "^0.7.1",

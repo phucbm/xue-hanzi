@@ -25,9 +25,10 @@ import {Braces, Flag} from "lucide-react";
 interface WordTabContentProps {
     entry: WordEntry;
     onWordClick: (simp: string) => void;
+    recentWords?: string[];
 }
 
-export function WordTabContent({ entry, onWordClick }: WordTabContentProps) {
+export function WordTabContent({ entry, onWordClick, recentWords }: WordTabContentProps) {
     const isSingleChar = [...entry.simp].length === 1 && /\p{Script=Han}/u.test(entry.simp);
     const [debugOpen, setDebugOpen] = useState(false);
 
@@ -90,7 +91,7 @@ export function WordTabContent({ entry, onWordClick }: WordTabContentProps) {
                 </Dialog>
 
 
-                <WordAIExplanation simp={entry.simp} trad={entry.trad} wordEntry={entry}/>
+                <WordAIExplanation simp={entry.simp} trad={entry.trad} wordEntry={entry} recentWords={recentWords}/>
 
                 {isSingleChar && (
                     <EtymologySection entry={entry} onWordClick={onWordClick}/>

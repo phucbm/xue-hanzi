@@ -50,17 +50,24 @@ function buildDictContext(entry: WordEntry): string {
   return lines.join("\n");
 }
 
-async function buildPrompt(simp: string, trad?: string, dictContext?: string): Promise<string> {
+async function buildPrompt(simp: string, trad?: string, dictContext?: string, recentWords?: string[]): Promise<string> {
   if (!_promptTemplate) {
     const res = await fetch("/prompts/word-analysis.md");
     _promptTemplate = await res.text();
   }
   const tradLine = trad && trad !== simp ? `\n- Traditional: ${trad}` : "";
+  const hints = recentWords && recentWords.length > 0
+    ? recentWords.filter((w) => w !== simp).slice(0, 15).join(", ")
+    : "";
+  const recentWordsBlock = hints
+    ? `Người dùng đã tra cứu các từ này gần đây: ${hints}\nNếu tự nhiên và không gượng, ưu tiên dùng trong câu ví dụ. Không bắt buộc.`
+    : "";
   return _promptTemplate
     .replace(/\{\{simp\}\}/g, simp)
     .replace(/\{\{trad\}\}/g, trad ?? simp)
     .replace(/\{\{trad_line\}\}/g, tradLine)
-    .replace(/\{\{dict_context\}\}/g, dictContext ?? "(không có dữ liệu từ điển)");
+    .replace(/\{\{dict_context\}\}/g, dictContext ?? "(không có dữ liệu từ điển)")
+    .replace(/\{\{recent_words\}\}/g, recentWordsBlock);
 }
 
 function relativeTime(iso: string): string {
@@ -74,11 +81,12 @@ interface WordAIExplanationProps {
   simp: string;
   trad?: string;
   wordEntry?: WordEntry;
+  recentWords?: string[];
 }
 
 type Status = "idle" | "loading" | "streaming" | "done" | "error";
 
-export function WordAIExplanation({ simp, trad, wordEntry }: WordAIExplanationProps) {
+export function WordAIExplanation({ simp, trad, wordEntry, recentWords }: WordAIExplanationProps) {
   const [status, setStatus] = useState<Status>("idle");
   const [streamContent, setStreamContent] = useState("");
   const [error, setError] = useState("");
@@ -105,26 +113,26 @@ export function WordAIExplanation({ simp, trad, wordEntry }: WordAIExplanationPr
   const hasContent = !!content;
 
   async function handleCopyPrompt() {
-    const prompt = await buildPrompt(simp, trad, dictContext);
+    const prompt = await buildPrompt(simp, trad, dictContext, recentWords);
     await navigator.clipboard.writeText(prompt);
     setPromptCopied(true);
     setTimeout(() => setPromptCopied(false), 2000);
   }
 
   async function handleOpenChatGPT() {
-    const prompt = await buildPrompt(simp, trad, dictContext);
+    const prompt = await buildPrompt(simp, trad, dictContext, recentWords);
     await navigator.clipboard.writeText(prompt);
     window.open("https://chatgpt.com/", "_blank");
   }
 
   async function handleOpenClaude() {
-    const prompt = await buildPrompt(simp, trad, dictContext);
+    const prompt = await buildPrompt(simp, trad, dictContext, recentWords);
     await navigator.clipboard.writeText(prompt);
     window.open("https://claude.ai/new", "_blank");
   }
 
   async function handleOpenGemini() {
-    const prompt = await buildPrompt(simp, trad, dictContext);
+    const prompt = await buildPrompt(simp, trad, dictContext, recentWords);
     await navigator.clipboard.writeText(prompt);
     window.open("https://gemini.google.com/app", "_blank");
   }
@@ -140,7 +148,7 @@ export function WordAIExplanation({ simp, trad, wordEntry }: WordAIExplanationPr
     setError("");
 
     try {
-      const { model: aiModel, stream } = await streamWordAnalysis(simp, trad, dictContext);
+      const { model: aiModel, stream } = await streamWordAnalysis(simp, trad, dictContext, recentWords);
       setStatus("streaming");
       setGuestCalls((n) => n + 1);
 

@@ -16,9 +16,10 @@ interface WordTabsProps {
   onWordClick: (simp: string) => void;
   activeTab?: string;
   onTabChange?: (value: string) => void;
+  recentWords?: string[];
 }
 
-export function WordTabs({ entries, onWordClick, activeTab, onTabChange }: WordTabsProps) {
+export function WordTabs({ entries, onWordClick, activeTab, onTabChange, recentWords }: WordTabsProps) {
   if (entries.length === 0) return null;
 
   // Deduplicate by lookup key — e.g. 一生一世 may produce two 一 entries from segmentation
@@ -27,7 +28,7 @@ export function WordTabs({ entries, onWordClick, activeTab, onTabChange }: WordT
   );
 
   if (unique.length === 1) {
-    return <WordTabContent entry={unique[0]} onWordClick={onWordClick} />;
+    return <WordTabContent entry={unique[0]} onWordClick={onWordClick} recentWords={recentWords} />;
   }
 
   return (
@@ -52,7 +53,7 @@ export function WordTabs({ entries, onWordClick, activeTab, onTabChange }: WordT
       <div className="relative z-10">
           {unique.map((entry, i) => (
               <TabsContent key={`${wordKey(entry)}-${i}`} value={wordKey(entry)}>
-                  <WordTabContent entry={entry} onWordClick={onWordClick} />
+                  <WordTabContent entry={entry} onWordClick={onWordClick} recentWords={recentWords} />
               </TabsContent>
           ))}
       </div>

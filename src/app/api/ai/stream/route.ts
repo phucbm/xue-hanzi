@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
     return new Response("AI chưa được cấu hình.", { status: 503 });
   }
 
-  const { simp, trad, dictContext } = await req.json();
+  const { simp, trad, dictContext, recentWords } = await req.json();
   if (!simp || typeof simp !== "string") {
     return new Response("Dữ liệu không hợp lệ.", { status: 400 });
   }
@@ -61,11 +61,16 @@ export async function POST(req: NextRequest) {
   const templatePath = path.join(process.cwd(), "public/prompts/word-analysis.md");
   const template = await readFile(templatePath, "utf-8");
   const tradLine = trad && trad !== simp ? `\n- Traditional: ${trad}` : "";
+  const recentWordsBlock =
+    Array.isArray(recentWords) && recentWords.length > 0
+      ? `Người dùng đã tra cứu các từ này gần đây: ${(recentWords as string[]).filter((w) => w !== simp).slice(0, 15).join(", ")}\nNếu tự nhiên và không gượng, ưu tiên dùng trong câu ví dụ. Không bắt buộc.`
+      : "";
   const prompt = template
     .replace(/\{\{simp\}\}/g, simp)
     .replace(/\{\{trad\}\}/g, trad ?? simp)
     .replace(/\{\{trad_line\}\}/g, tradLine)
-    .replace(/\{\{dict_context\}\}/g, dictContext && typeof dictContext === "string" ? dictContext : "(không có dữ liệu từ điển)");
+    .replace(/\{\{dict_context\}\}/g, dictContext && typeof dictContext === "string" ? dictContext : "(không có dữ liệu từ điển)")
+    .replace(/\{\{recent_words\}\}/g, recentWordsBlock);
 
   const upstream = await fetch(AI_API_URL, {
     method: "POST",

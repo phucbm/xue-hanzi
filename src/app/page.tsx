@@ -107,6 +107,10 @@ export default function HomePage() {
         onTabChange={handleTabChange}
         onWordClick={openWord}
         loading={isWordLoading}
+        recentWords={history
+          .filter((e) => e.type === "word")
+          .slice(0, 16)
+          .map((e) => e.label)}
       />
     </AppLayout>
   );

@@ -34,6 +34,10 @@ Phân tích tất cả thành phần xuống đơn vị nhỏ nhất có nghĩa.
 
 **3.** [sentence](?word=sentence). *pinyin.* — Vietnamese translation.
 
+**4.** [sentence](?word=sentence). *pinyin.* — Vietnamese translation.
+
+**5.** [sentence](?word=sentence). *pinyin.* — Vietnamese translation.
+
 ---
 
 ## CASE 2 — Compound word
@@ -56,6 +60,10 @@ Với mỗi chữ trong từ, phân tích thành phần xuống đơn vị nhỏ
 **2.** [sentence](?word=sentence). *pinyin.* — Vietnamese translation.
 
 **3.** [sentence](?word=sentence). *pinyin.* — Vietnamese translation.
+
+**4.** [sentence](?word=sentence). *pinyin.* — Vietnamese translation.
+
+**5.** [sentence](?word=sentence). *pinyin.* — Vietnamese translation.
 
 ---
 
@@ -84,6 +92,10 @@ Với mỗi chữ quan trọng trong thành ngữ, phân tích thành phần xu�
 
 **3.** [sentence](?word=sentence). *pinyin.* — Vietnamese translation.
 
+**4.** [sentence](?word=sentence). *pinyin.* — Vietnamese translation.
+
+**5.** [sentence](?word=sentence). *pinyin.* — Vietnamese translation.
+
 ---
 
 ## GENERAL RULES
@@ -102,6 +114,8 @@ Với mỗi chữ quan trọng trong thành ngữ, phân tích thành phần xu�
 ## INPUT
 
 - Simplified: {{simp}}{{trad_line}}
+
+{{recent_words}}
 
 ## Dữ liệu từ điển (ưu tiên tuyệt đối — không bịa đặt thông tin mâu thuẫn với phần này)
 
