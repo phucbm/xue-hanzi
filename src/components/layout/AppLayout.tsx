@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { SearchIcon, History } from "lucide-react";
+import { SearchIcon, History, RotateCw } from "lucide-react";
 import { SearchDialog } from "@/components/search/search-dialog";
 import { RightSheet } from "@/components/layout/right-sheet";
 import type { HistoryEntry } from "@/core/types";
@@ -97,7 +97,7 @@ export function AppLayout({
         className="rounded-md size-7"
       />
       <span className="font-semibold text-sm hidden sm:block">Hiểu Chữ Hán</span>
-      <span className="text-xs text-muted-foreground hidden sm:block">v{pkg.version}</span>
+      <span className="text-xs text-muted-foreground">v{pkg.version}</span>
     </>
   );
 
@@ -161,6 +161,19 @@ export function AppLayout({
           aria-label="Lịch sử"
         >
           <History className="h-4 w-4" />
+        </Button>
+
+
+
+        {/* Reload — icon-only, mobile only */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 md:hidden"
+          onClick={() => window.location.reload()}
+          aria-label="Tải lại trang"
+        >
+          <RotateCw className="h-4 w-4" />
         </Button>
       </header>
 
