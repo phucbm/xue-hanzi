@@ -1,13 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { streamWordAnalysis } from "@/lib/groq";
@@ -245,18 +248,23 @@ export function WordAIExplanation({ simp, trad, wordEntry, recentWords }: WordAI
                 <ChevronDown className="h-3 w-3" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {AI_MODELS.map((m) => (
-                  <DropdownMenuItem
-                    key={m.id}
-                    onClick={() => setSelectedModel(m)}
-                    className="flex items-center justify-between gap-4"
-                  >
-                    <span>
-                      <span className="font-medium">{m.label}</span>
-                      <span className="ml-1.5 text-xs text-muted-foreground">{m.provider}</span>
-                    </span>
-                    {m.id === selectedModel.id && <Check className="h-3.5 w-3.5 shrink-0" />}
-                  </DropdownMenuItem>
+                {Array.from(new Set(AI_MODELS.map((m) => m.provider))).map((provider, idx) => (
+                  <React.Fragment key={provider}>
+                    {idx > 0 && <DropdownMenuSeparator />}
+                    <DropdownMenuGroup>
+                    <DropdownMenuLabel className="text-xs font-normal text-muted-foreground py-1 px-2">{provider}</DropdownMenuLabel>
+                    {AI_MODELS.filter((m) => m.provider === provider).map((m) => (
+                      <DropdownMenuItem
+                        key={m.id}
+                        onClick={() => setSelectedModel(m)}
+                        className="flex items-center justify-between gap-4"
+                      >
+                        <span className="font-medium text-xs">{m.label}</span>
+                        {m.id === selectedModel.id && <Check className="h-3.5 w-3.5 shrink-0" />}
+                      </DropdownMenuItem>
+                    ))}
+                    </DropdownMenuGroup>
+                  </React.Fragment>
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
@@ -274,7 +282,7 @@ export function WordAIExplanation({ simp, trad, wordEntry, recentWords }: WordAI
       )}
 
       {status === "error" && error && (
-        <p className="text-sm text-destructive">{error}</p>
+        <p className="text-sm text-destructive"><code className="break-all bg-red-200 p-2 block rounded-md">{error}</code></p>
       )}
 
       {hasContent && (

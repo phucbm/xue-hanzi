@@ -6,7 +6,7 @@ import { db, initSchema } from "@/lib/turso";
 import { IP_DAILY_LIMIT, AI_WINDOW_MS } from "@/lib/aiConstants";
 import { isAllowedModel, getDefaultModel } from "@/lib/aiModels";
 import { observe, propagateAttributes, setActiveTraceIO } from "@langfuse/tracing";
-import { trace } from "@opentelemetry/api";
+import { context, trace } from "@opentelemetry/api";
 import { langfuseSpanProcessor } from "@/instrumentation";
 
 const AI_API_URL = "https://openrouter.ai/api/v1/chat/completions";
@@ -46,33 +46,45 @@ function extractTextFromSseChunk(chunk: string): string {
 }
 
 const handler = async (req: NextRequest) => {
+  const ip = getClientIp(req);
+  const body = await req.json();
+  const resolvedModel = (isAllowedModel(body.modelId) ? body.modelId : null) ?? getDefaultModel().id;
+
   return propagateAttributes(
-    { traceName: "word-analysis", userId: process.env.HISTORY_PASSPHRASE },
-    () => handleStream(req)
+    {
+      traceName: "word-analysis",
+      userId: process.env.HISTORY_PASSPHRASE,
+      sessionId: `ip:${ip}`,
+      tags: ["word-analysis"],
+      metadata: { ip, model: resolvedModel },
+    },
+    () => handleStream(req, body, resolvedModel, ip)
   );
 };
 
-const handleStream = async (req: NextRequest) => {
+const handleStream = async (
+  req: NextRequest,
+  body: Record<string, unknown>,
+  resolvedModel: string,
+  ip: string
+) => {
   const key = process.env.OPENROUTER_API_KEY;
 
   if (!key) {
     return new Response("AI chưa được cấu hình.", { status: 503 });
   }
 
-  const { simp, trad, dictContext, recentWords, modelId } = await req.json();
+  const simp = body.simp as string | undefined;
+  const trad = body.trad as string | undefined;
+  const dictContext = body.dictContext as string | undefined;
+  const recentWords = body.recentWords as string[] | undefined;
   if (!simp || typeof simp !== "string") {
     return new Response("Dữ liệu không hợp lệ.", { status: 400 });
   }
 
-  const resolvedModel =
-    process.env.AI_MODEL ??
-    (isAllowedModel(modelId) ? modelId : null) ??
-    getDefaultModel().id;
-
   await ensureSchema();
 
   if (db) {
-    const ip = getClientIp(req);
     const cutoff = new Date(Date.now() - AI_WINDOW_MS).toISOString();
     const result = await db.execute({
       sql: "SELECT COUNT(*) as count FROM ai_usage_log WHERE user_id = ? AND called_at > ?",
@@ -130,8 +142,11 @@ const handleStream = async (req: NextRequest) => {
 
   const [clientStream, captureStream] = upstream.body!.tee();
 
-  // consume captureStream in background to record output
-  (async () => {
+  // capture active OTEL context before returning response (context is lost after await boundary)
+  const activeCtx = context.active();
+  const activeSpan = trace.getActiveSpan();
+
+  const capturePromise = (async () => {
     const reader = captureStream.getReader();
     const decoder = new TextDecoder();
     let fullText = "";
@@ -142,12 +157,17 @@ const handleStream = async (req: NextRequest) => {
         fullText += extractTextFromSseChunk(decoder.decode(value, { stream: true }));
       }
     } finally {
-      setActiveTraceIO({ output: fullText });
-      trace.getActiveSpan()?.end();
+      context.with(activeCtx, () => {
+        setActiveTraceIO({ output: fullText });
+        activeSpan?.end();
+      });
     }
   })();
 
-  after(async () => await langfuseSpanProcessor.forceFlush());
+  after(async () => {
+    await capturePromise;
+    await langfuseSpanProcessor.forceFlush();
+  });
 
   return new Response(clientStream, {
     headers: {
