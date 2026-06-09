@@ -50,6 +50,10 @@ const handler = async (req: NextRequest) => {
   const body = await req.json();
   const resolvedModel = (isAllowedModel(body.modelId) ? body.modelId : null) ?? getDefaultModel().id;
 
+  // capture observe()'s root span BEFORE propagateAttributes nests further
+  const rootCtx = context.active();
+  const rootSpan = trace.getActiveSpan();
+
   return propagateAttributes(
     {
       traceName: "word-analysis",
@@ -58,7 +62,7 @@ const handler = async (req: NextRequest) => {
       tags: ["word-analysis"],
       metadata: { ip, model: resolvedModel },
     },
-    () => handleStream(req, body, resolvedModel, ip)
+    () => handleStream(req, body, resolvedModel, ip, rootCtx, rootSpan)
   );
 };
 
@@ -66,7 +70,9 @@ const handleStream = async (
   req: NextRequest,
   body: Record<string, unknown>,
   resolvedModel: string,
-  ip: string
+  ip: string,
+  rootCtx: ReturnType<typeof context.active>,
+  rootSpan: ReturnType<typeof trace.getActiveSpan>
 ) => {
   const key = process.env.OPENROUTER_API_KEY;
 
@@ -117,7 +123,7 @@ const handleStream = async (
     .replace(/\{\{dict_context\}\}/g, dictContext && typeof dictContext === "string" ? dictContext : "(không có dữ liệu từ điển)")
     .replace(/\{\{recent_words\}\}/g, recentWordsBlock);
 
-  setActiveTraceIO({ input: prompt });
+  // mark as generation so Langfuse populates model column
   trace.getActiveSpan()?.setAttribute(LangfuseOtelSpanAttributes.OBSERVATION_TYPE, "generation");
   trace.getActiveSpan()?.setAttribute(LangfuseOtelSpanAttributes.OBSERVATION_MODEL, resolvedModel);
 
@@ -144,10 +150,6 @@ const handleStream = async (
 
   const [clientStream, captureStream] = upstream.body!.tee();
 
-  // capture active OTEL context before returning response (context is lost after await boundary)
-  const activeCtx = context.active();
-  const activeSpan = trace.getActiveSpan();
-
   const capturePromise = (async () => {
     const reader = captureStream.getReader();
     const decoder = new TextDecoder();
@@ -159,9 +161,10 @@ const handleStream = async (
         fullText += extractTextFromSseChunk(decoder.decode(value, { stream: true }));
       }
     } finally {
-      context.with(activeCtx, () => {
-        setActiveTraceIO({ output: fullText });
-        activeSpan?.end();
+      // set input+output together on root span to avoid partial overwrites
+      context.with(rootCtx, () => {
+        setActiveTraceIO({ input: prompt, output: fullText });
+        rootSpan?.end();
       });
     }
   })();
