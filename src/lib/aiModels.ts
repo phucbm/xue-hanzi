@@ -36,6 +36,41 @@ export const AI_MODELS: AiModel[] = [
     provider: "NVIDIA",
     contextWindow: 128_000,
   },
+  // https://openrouter.ai/google/gemma-4-31b-it:free
+  {
+    id: "google/gemma-4-31b-it:free",
+    label: "Gemma 4 31B",
+    provider: "Google",
+    contextWindow: 262_000,
+  },
+  // https://openrouter.ai/nex-agi/nex-n2-pro:free
+  {
+    id: "nex-agi/nex-n2-pro:free",
+    label: "Nex N2 Pro",
+    provider: "Nex AGI",
+    contextWindow: 131_072,
+  },
+  // https://openrouter.ai/qwen/qwen3-next-80b-a3b-instruct:free
+  {
+    id: "qwen/qwen3-next-80b-a3b-instruct:free",
+    label: "Qwen3 Next 80B",
+    provider: "Qwen",
+    contextWindow: 131_072,
+  },
+  // https://openrouter.ai/openrouter/free
+  {
+    id: "openrouter/free",
+    label: "OpenRouter Free",
+    provider: "OpenRouter",
+    contextWindow: 131_072,
+  },
+  // https://openrouter.ai/qwen/qwen3-coder:free
+  {
+    id: "qwen/qwen3-coder:free",
+    label: "Qwen3 Coder",
+    provider: "Qwen",
+    contextWindow: 1_000_000,
+  },
 ];
 
 export function getDefaultModel(): AiModel {
