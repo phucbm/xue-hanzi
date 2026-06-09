@@ -5,7 +5,7 @@ import path from "path";
 import { db, initSchema } from "@/lib/turso";
 import { IP_DAILY_LIMIT, AI_WINDOW_MS } from "@/lib/aiConstants";
 import { isAllowedModel, getDefaultModel } from "@/lib/aiModels";
-import { observe, propagateAttributes, setActiveTraceIO } from "@langfuse/tracing";
+import { observe, propagateAttributes, setActiveTraceIO, LangfuseOtelSpanAttributes } from "@langfuse/tracing";
 import { context, trace } from "@opentelemetry/api";
 import { langfuseSpanProcessor } from "@/instrumentation";
 
@@ -118,6 +118,8 @@ const handleStream = async (
     .replace(/\{\{recent_words\}\}/g, recentWordsBlock);
 
   setActiveTraceIO({ input: prompt });
+  trace.getActiveSpan()?.setAttribute(LangfuseOtelSpanAttributes.OBSERVATION_TYPE, "generation");
+  trace.getActiveSpan()?.setAttribute(LangfuseOtelSpanAttributes.OBSERVATION_MODEL, resolvedModel);
 
   const upstream = await fetch(AI_API_URL, {
     method: "POST",
