@@ -42,7 +42,7 @@ interface AppLayoutProps {
   isSyncing?: boolean;
   onAuthenticate?: (pass: string) => Promise<boolean>;
   onLogout?: () => void;
-  children: React.ReactNode;
+  children: React.ReactNode | ((props: { openSearch: () => void; openHistory: () => void }) => React.ReactNode);
 }
 
 export function AppLayout({
@@ -166,7 +166,7 @@ export function AppLayout({
 
       <main className="flex-1">
         <div className="max-w-4xl mx-auto p-4">
-          {children}
+          {typeof children === "function" ? children({ openSearch: () => setSearchOpen(true), openHistory: () => setHistoryOpen(true) }) : children}
         </div>
       </main>
 

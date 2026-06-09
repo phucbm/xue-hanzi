@@ -101,17 +101,22 @@ export default function HomePage() {
       onAuthenticate={authenticate}
       onLogout={logout}
     >
-      <ContentArea
-        entries={entries}
-        activeTab={activeTab}
-        onTabChange={handleTabChange}
-        onWordClick={openWord}
-        loading={isWordLoading}
-        recentWords={history
-          .filter((e) => e.type === "word")
-          .slice(0, 16)
-          .map((e) => e.label)}
-      />
+      {({ openSearch, openHistory }) => (
+        <ContentArea
+          entries={entries}
+          activeTab={activeTab}
+          onTabChange={handleTabChange}
+          onWordClick={openWord}
+          loading={isWordLoading}
+          recentWords={history
+            .filter((e) => e.type === "word")
+            .slice(0, 16)
+            .map((e) => e.label)}
+          isSynced={isSynced}
+          onOpenSearch={openSearch}
+          onOpenHistory={openHistory}
+        />
+      )}
     </AppLayout>
   );
 }

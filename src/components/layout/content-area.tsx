@@ -42,9 +42,10 @@ interface ContentAreaProps {
   recentWords?: string[]
   isSynced?: boolean
   onOpenSearch?: () => void
+  onOpenHistory?: () => void
 }
 
-export function ContentArea({ entries, activeTab, onTabChange, onWordClick, loading, recentWords, isSynced, onOpenSearch }: ContentAreaProps) {
+export function ContentArea({ entries, activeTab, onTabChange, onWordClick, loading, recentWords, isSynced, onOpenSearch, onOpenHistory }: ContentAreaProps) {
   if (loading && entries.length === 0) {
     return (
       <div className="max-w-3xl mx-auto w-full py-4 flex flex-col gap-4">
@@ -70,16 +71,13 @@ export function ContentArea({ entries, activeTab, onTabChange, onWordClick, load
     return (
       <div className="content-area-welcome max-w-2xl mx-auto w-full py-12 flex flex-col gap-10">
         {/* Hero */}
-        <div className="flex flex-col items-center gap-4 text-center relative">
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none" aria-hidden="true">
-            <span className="text-[160px] font-bold text-foreground/[0.04] leading-none">漢</span>
-          </div>
-          <Image src="/icon.png" alt="Hiểu Chữ Hán" width={64} height={64} className="rounded-2xl shadow-md relative z-10" />
-          <div className="relative z-10">
+        <div className="flex flex-col items-center gap-4 text-center">
+          <Image src="/icon.png" alt="Hiểu Chữ Hán" width={64} height={64} className="rounded-2xl shadow-md" />
+          <div>
             <h1 className="text-2xl font-bold tracking-tight">Hiểu Chữ Hán</h1>
             <p className="text-muted-foreground mt-1 text-sm">Từ điển Trung – Hán Việt, tra nghĩa &amp; học chữ</p>
           </div>
-          <Button onClick={onOpenSearch} className="relative z-10 gap-2 mt-1">
+          <Button onClick={onOpenSearch} className="gap-2 mt-1">
             <IconSearch size={16} />
             Tìm kiếm
             <kbd className="ml-1 text-xs opacity-60 border rounded px-1 py-0.5 bg-background/20 leading-none">⌘K</kbd>
@@ -126,7 +124,7 @@ export function ContentArea({ entries, activeTab, onTabChange, onWordClick, load
               <p className="text-sm font-medium">Đồng bộ lịch sử</p>
               <p className="text-xs text-muted-foreground mt-0.5">Dùng passphrase để lưu lịch sử tra cứu lên đám mây</p>
             </div>
-            <Button variant="outline" size="sm" onClick={onOpenSearch} className="shrink-0 self-start sm:self-auto">
+            <Button variant="outline" size="sm" onClick={onOpenHistory} className="shrink-0 self-start sm:self-auto">
               Xem lịch sử
             </Button>
           </div>
