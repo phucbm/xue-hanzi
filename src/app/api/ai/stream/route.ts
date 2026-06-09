@@ -1,9 +1,13 @@
 import { NextRequest } from "next/server";
+import { after } from "next/server";
 import { readFile } from "fs/promises";
 import path from "path";
 import { db, initSchema } from "@/lib/turso";
 import { IP_DAILY_LIMIT, AI_WINDOW_MS } from "@/lib/aiConstants";
 import { isAllowedModel, getDefaultModel } from "@/lib/aiModels";
+import { observe, propagateAttributes, setActiveTraceIO } from "@langfuse/tracing";
+import { trace } from "@opentelemetry/api";
+import { langfuseSpanProcessor } from "@/instrumentation";
 
 const AI_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 
@@ -24,8 +28,32 @@ function getClientIp(req: NextRequest): string {
   );
 }
 
-export async function POST(req: NextRequest) {
-  const key = process.env.OPENROUTER_API_KEY ?? process.env.GROQ_API_KEY;
+function extractTextFromSseChunk(chunk: string): string {
+  let text = "";
+  for (const line of chunk.split("\n")) {
+    if (!line.startsWith("data: ")) continue;
+    const data = line.slice(6).trim();
+    if (!data || data === "[DONE]") continue;
+    try {
+      const obj = JSON.parse(data);
+      const content = obj.choices?.[0]?.delta?.content;
+      if (content) text += content;
+    } catch {
+      // malformed SSE line
+    }
+  }
+  return text;
+}
+
+const handler = async (req: NextRequest) => {
+  return propagateAttributes(
+    { traceName: "word-analysis", userId: process.env.HISTORY_PASSPHRASE },
+    () => handleStream(req)
+  );
+};
+
+const handleStream = async (req: NextRequest) => {
+  const key = process.env.OPENROUTER_API_KEY;
 
   if (!key) {
     return new Response("AI chưa được cấu hình.", { status: 503 });
@@ -35,6 +63,7 @@ export async function POST(req: NextRequest) {
   if (!simp || typeof simp !== "string") {
     return new Response("Dữ liệu không hợp lệ.", { status: 400 });
   }
+
   const resolvedModel =
     process.env.AI_MODEL ??
     (isAllowedModel(modelId) ? modelId : null) ??
@@ -76,6 +105,8 @@ export async function POST(req: NextRequest) {
     .replace(/\{\{dict_context\}\}/g, dictContext && typeof dictContext === "string" ? dictContext : "(không có dữ liệu từ điển)")
     .replace(/\{\{recent_words\}\}/g, recentWordsBlock);
 
+  setActiveTraceIO({ input: prompt });
+
   const upstream = await fetch(AI_API_URL, {
     method: "POST",
     headers: {
@@ -92,11 +123,33 @@ export async function POST(req: NextRequest) {
   });
 
   if (!upstream.ok) {
+    trace.getActiveSpan()?.end();
     const err = await upstream.text();
     return new Response(`Lỗi từ AI (${upstream.status}): ${err}`, { status: 502 });
   }
 
-  return new Response(upstream.body, {
+  const [clientStream, captureStream] = upstream.body!.tee();
+
+  // consume captureStream in background to record output
+  (async () => {
+    const reader = captureStream.getReader();
+    const decoder = new TextDecoder();
+    let fullText = "";
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        fullText += extractTextFromSseChunk(decoder.decode(value, { stream: true }));
+      }
+    } finally {
+      setActiveTraceIO({ output: fullText });
+      trace.getActiveSpan()?.end();
+    }
+  })();
+
+  after(async () => await langfuseSpanProcessor.forceFlush());
+
+  return new Response(clientStream, {
     headers: {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
@@ -104,4 +157,9 @@ export async function POST(req: NextRequest) {
       "X-AI-Model": resolvedModel,
     },
   });
-}
+};
+
+export const POST = observe(handler, {
+  name: "word-analysis",
+  endOnExit: false,
+});

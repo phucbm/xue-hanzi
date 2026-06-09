@@ -12,7 +12,7 @@
 - `public/data/dictionary.json` (28 MB, 116K entries) is pre-built and committed. Do not regenerate unless source data changes.
 - Serwist SW (`src/app/sw.ts`): requires `disable: process.env.NODE_ENV === 'development'` in next.config to avoid SW interference in dev.
 - `kVietnamese` values in `src/data/kVietnamese.json` are raw Unicode Unihan — space-separated readings per codepoint key (e.g. `"U+4E2D": "trung"`).
-- AI (GROQ) is opt-in, enabled only when `GROQ_API_KEY` is set (server-side). Rate limits in Turso `ai_usage_log`: 5/day guests, 100/day logged-in. Constants in `src/lib/aiConstants.ts`. Both `/api/ai/stream` (word analysis) and `/api/ai/recognize` (handwriting) share the same pool and `GROQ_MODEL` env var.
+- AI (OpenRouter) is opt-in, enabled only when `OPENROUTER_API_KEY` is set (server-side). Rate limits in Turso `ai_usage_log`. Constants in `src/lib/aiConstants.ts`. Both `/api/ai/stream` (word analysis) and `/api/ai/recognize` (handwriting) share the same pool and `AI_MODEL` env var.
 - `"use server"` files can only export async functions — never export plain constants from them, put shared constants in a separate non-server file.
 - Dexie has been removed. No client-side DB — all persistence is Turso (server) or localStorage.
 - Always show the full error message in the UI. Never swallow errors into generic strings like "Có lỗi xảy ra". In catch blocks: `toast.error(e instanceof Error ? e.message : String(e))`.

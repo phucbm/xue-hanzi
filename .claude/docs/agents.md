@@ -22,5 +22,5 @@ IP-based daily cap (`IP_DAILY_LIMIT`) tracked in Turso `ai_usage_log`. No client
 `src/components/PWATracker.tsx` — tracks AI explanation calls via counterapi.dev (anonymous hit counter, no user data).
 
 ## Env vars
-- `OPENROUTER_API_KEY` — server-side only; route returns 503 if unset (also accepts `GROQ_API_KEY` as fallback)
+- `OPENROUTER_API_KEY` — server-side only; route returns 503 if unset
 - `AI_MODEL` — server-side only; overrides client model selection

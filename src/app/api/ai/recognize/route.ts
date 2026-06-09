@@ -4,7 +4,7 @@ import path from "path";
 import { db, initSchema } from "@/lib/turso";
 import { IP_DAILY_LIMIT, AI_WINDOW_MS } from "@/lib/aiConstants";
 
-const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
+const AI_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 let schemaReady = false;
 
@@ -24,8 +24,8 @@ function getClientIp(req: NextRequest): string {
 }
 
 export async function POST(req: NextRequest) {
-  const key = process.env.GROQ_API_KEY;
-  const model = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+  const key = process.env.OPENROUTER_API_KEY;
+  const model = process.env.AI_MODEL || "openai/gpt-oss-120b:free";
 
   if (!key) {
     return new Response("AI chưa được cấu hình.", { status: 503 });
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
   const template = await readFile(promptPath, "utf-8");
   const prompt = template.replace("{{stroke_data}}", strokeData);
 
-  const upstream = await fetch(GROQ_API_URL, {
+  const upstream = await fetch(AI_API_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
 
   if (!upstream.ok) {
     const err = await upstream.text();
-    return new Response(`Lỗi từ GROQ (${upstream.status}): ${err}`, { status: 502 });
+    return new Response(`Lỗi từ AI (${upstream.status}): ${err}`, { status: 502 });
   }
 
   const data = await upstream.json();
