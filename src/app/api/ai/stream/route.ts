@@ -3,6 +3,7 @@ import { readFile } from "fs/promises";
 import path from "path";
 import { db, initSchema } from "@/lib/turso";
 import { IP_DAILY_LIMIT, AI_WINDOW_MS } from "@/lib/aiConstants";
+import { isAllowedModel, getDefaultModel } from "@/lib/aiModels";
 
 const AI_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 
@@ -25,16 +26,19 @@ function getClientIp(req: NextRequest): string {
 
 export async function POST(req: NextRequest) {
   const key = process.env.OPENROUTER_API_KEY ?? process.env.GROQ_API_KEY;
-  const model = process.env.AI_MODEL;
 
   if (!key) {
     return new Response("AI chưa được cấu hình.", { status: 503 });
   }
 
-  const { simp, trad, dictContext, recentWords } = await req.json();
+  const { simp, trad, dictContext, recentWords, modelId } = await req.json();
   if (!simp || typeof simp !== "string") {
     return new Response("Dữ liệu không hợp lệ.", { status: 400 });
   }
+  const resolvedModel =
+    process.env.AI_MODEL ??
+    (isAllowedModel(modelId) ? modelId : null) ??
+    getDefaultModel().id;
 
   await ensureSchema();
 
@@ -79,7 +83,7 @@ export async function POST(req: NextRequest) {
       Authorization: `Bearer ${key}`,
     },
     body: JSON.stringify({
-      ...(model && { model }),
+      model: resolvedModel,
       stream: true,
       temperature: 0,
       max_tokens: 16384,
@@ -97,7 +101,7 @@ export async function POST(req: NextRequest) {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
-      "X-AI-Model": model ?? "openrouter",
+      "X-AI-Model": resolvedModel,
     },
   });
 }

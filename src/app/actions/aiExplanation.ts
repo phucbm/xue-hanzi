@@ -1,7 +1,7 @@
 "use server";
 
 import { db, initSchema } from "@/lib/turso";
-import { GUEST_USER_ID, GUEST_DAILY_LIMIT } from "@/lib/aiConstants";
+import { GUEST_USER_ID } from "@/lib/aiConstants";
 
 export interface AiExplanation {
   simp: string;
@@ -64,9 +64,3 @@ export async function saveAiExplanation(
   });
 }
 
-export async function getAiUsageStatus(): Promise<{
-  remaining: number;
-  limit: number;
-}> {
-  return { remaining: GUEST_DAILY_LIMIT, limit: GUEST_DAILY_LIMIT };
-}

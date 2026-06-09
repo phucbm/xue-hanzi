@@ -17,14 +17,11 @@ import {
   type AiExplanation,
 } from "@/app/actions/aiExplanation";
 import type { WordEntry } from "@/core/types";
-import { GUEST_DAILY_LIMIT } from "@/lib/aiConstants";
 import { trackAiCall } from "@/core/pwa";
 import { Check, ChevronDown, Copy, ExternalLink, Loader2, Sparkles } from "lucide-react";
 import { MovingBorder } from "@/components/phucbm/moving-border";
-import { AiCreditBadge } from "@/components/shared/AiCreditBadge";
 import { Skeleton } from "@/components/ui/skeleton";
-
-const AI_PROVIDER = "openrouter";
+import { AI_MODELS, getDefaultModel, type AiModel } from "@/lib/aiModels";
 
 let _promptTemplate: string | null = null;
 
@@ -93,10 +90,7 @@ export function WordAIExplanation({ simp, trad, wordEntry, recentWords }: WordAI
   const [copied, setCopied] = useState(false);
   const [promptCopied, setPromptCopied] = useState(false);
   const [cached, setCached] = useState<AiExplanation | null | undefined>(undefined);
-  const [guestCalls, setGuestCalls] = useState(0);
-
-  const remaining = GUEST_DAILY_LIMIT - guestCalls;
-  const isLimited = remaining <= 0;
+  const [selectedModel, setSelectedModel] = useState<AiModel>(getDefaultModel());
 
   const dictContext = wordEntry ? buildDictContext(wordEntry) : undefined;
 
@@ -138,19 +132,13 @@ export function WordAIExplanation({ simp, trad, wordEntry, recentWords }: WordAI
   }
 
   async function handleGenerate() {
-    if (isLimited) {
-      setError(`Đã dùng hết ${GUEST_DAILY_LIMIT} lượt hôm nay.`);
-      return;
-    }
-
     setStatus("loading");
     setStreamContent("");
     setError("");
 
     try {
-      const { model: aiModel, stream } = await streamWordAnalysis(simp, trad, dictContext, recentWords);
+      const { model: aiModel, stream } = await streamWordAnalysis(simp, trad, dictContext, recentWords, selectedModel.id);
       setStatus("streaming");
-      setGuestCalls((n) => n + 1);
 
       let full = "";
       for await (const chunk of stream) {
@@ -182,62 +170,60 @@ export function WordAIExplanation({ simp, trad, wordEntry, recentWords }: WordAI
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <p className="text-sm">Giải thích bằng AI</p>
-        <div className="flex items-center gap-0.5">
-          <div className="flex items-center gap-1.5">
-            {!isRunning && (
-              <AiCreditBadge remaining={remaining} limit={GUEST_DAILY_LIMIT} />
-            )}
-            {/* mobile */}
+        <div className="flex items-center gap-1.5">
+          {/* Copy prompt — mobile */}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleCopyPrompt}
+            className="md:hidden gap-1.5 text-xs h-7 text-muted-foreground"
+          >
+            {promptCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+            Prompt
+          </Button>
+          {/* Copy prompt — desktop */}
+          <ButtonGroup className="hidden md:flex">
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={handleCopyPrompt}
-              className="md:hidden gap-1.5 text-xs h-7 text-muted-foreground"
+              className="gap-1.5 text-xs h-7 text-muted-foreground"
             >
               {promptCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-              Prompt
+              {promptCopied ? "Đã sao chép" : "Copy prompt"}
             </Button>
-            {/* desktop */}
-            <ButtonGroup className="hidden md:flex">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleCopyPrompt}
-                className="gap-1.5 text-xs h-7 text-muted-foreground"
-              >
-                {promptCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                {promptCopied ? "Đã sao chép" : "Copy prompt"}
-              </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger className="inline-flex items-center justify-center border border-input bg-background hover:bg-accent hover:text-accent-foreground h-7 px-2 text-muted-foreground transition-colors">
-                  <ChevronDown className="h-3 w-3" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={handleOpenChatGPT}>
-                    <ExternalLink className="h-3.5 w-3.5" />
-                    ChatGPT
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleOpenClaude}>
-                    <ExternalLink className="h-3.5 w-3.5" />
-                    Claude.ai
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleOpenGemini}>
-                    <ExternalLink className="h-3.5 w-3.5" />
-                    Gemini
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </ButtonGroup>
+            <DropdownMenu>
+              <DropdownMenuTrigger className="inline-flex items-center justify-center border border-input bg-background hover:bg-accent hover:text-accent-foreground h-7 px-2 text-muted-foreground transition-colors">
+                <ChevronDown className="h-3 w-3" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleOpenChatGPT}>
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  ChatGPT
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleOpenClaude}>
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Claude.ai
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleOpenGemini}>
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Gemini
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </ButtonGroup>
+          {/* Generate button with model selector */}
+          <ButtonGroup>
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={handleGenerate}
-              disabled={isRunning || isLimited}
+              disabled={isRunning}
               className="gap-1.5 text-xs h-7"
-              title={cached?.model ?? AI_PROVIDER}
+              title={selectedModel.id}
             >
               {isRunning ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -251,7 +237,30 @@ export function WordAIExplanation({ simp, trad, wordEntry, recentWords }: WordAI
                 {isRunning ? "AI..." : "AI"}
               </span>
             </Button>
-          </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                disabled={isRunning}
+                className="inline-flex items-center justify-center border border-input bg-background hover:bg-accent hover:text-accent-foreground h-7 px-2 text-muted-foreground transition-colors disabled:opacity-50 disabled:pointer-events-none"
+              >
+                <ChevronDown className="h-3 w-3" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {AI_MODELS.map((m) => (
+                  <DropdownMenuItem
+                    key={m.id}
+                    onClick={() => setSelectedModel(m)}
+                    className="flex items-center justify-between gap-4"
+                  >
+                    <span>
+                      <span className="font-medium">{m.label}</span>
+                      <span className="ml-1.5 text-xs text-muted-foreground">{m.provider}</span>
+                    </span>
+                    {m.id === selectedModel.id && <Check className="h-3.5 w-3.5 shrink-0" />}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </ButtonGroup>
         </div>
       </div>
 
@@ -266,12 +275,6 @@ export function WordAIExplanation({ simp, trad, wordEntry, recentWords }: WordAI
 
       {status === "error" && error && (
         <p className="text-sm text-destructive">{error}</p>
-      )}
-
-      {isLimited && (
-        <p className="text-sm text-muted-foreground">
-          Đã dùng hết {GUEST_DAILY_LIMIT} lượt AI hôm nay. Vui lòng thử lại sau 24 giờ.
-        </p>
       )}
 
       {hasContent && (
@@ -315,7 +318,7 @@ export function WordAIExplanation({ simp, trad, wordEntry, recentWords }: WordAI
               <p className="text-xs text-muted-foreground">
                 AI{cached && !isRunning
                   ? ` · ${relativeTime(cached.generatedAt)} · bởi cộng đồng · ${cached.model}`
-                  : isRunning ? ` · ${AI_PROVIDER}` : ""} - nội dung được tạo bởi AI, có thể không chính xác và chỉ để tham khảo.
+                  : isRunning ? ` · ${selectedModel.label}` : ""} - nội dung được tạo bởi AI, có thể không chính xác và chỉ để tham khảo.
               </p>
             </div>
           </div>

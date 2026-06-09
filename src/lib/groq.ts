@@ -3,11 +3,12 @@ export async function streamWordAnalysis(
     trad?: string,
     dictContext?: string,
     recentWords?: string[],
+    modelId?: string,
 ): Promise<{ model: string; stream: AsyncGenerator<string> }> {
     const res = await fetch("/api/ai/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ simp, trad, dictContext, recentWords }),
+        body: JSON.stringify({ simp, trad, dictContext, recentWords, modelId }),
     });
 
     if (!res.ok) {
