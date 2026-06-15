@@ -166,7 +166,7 @@ export function SearchDialog({ open, onOpenChange, onSelect, recentWordLabels = 
               }}
               onKeyDown={handleKeyDown}
               placeholder="Nhập chữ Hán, pinyin, Hán Việt..."
-              className="flex-1 min-w-0 bg-transparent text-sm outline-none placeholder:text-muted-foreground py-1 font-chinese"
+              className="flex-1 min-w-0 bg-transparent text-base outline-none placeholder:text-muted-foreground py-1 font-chinese"
             />
             <Button size="sm" onClick={runSearch} disabled={!query.trim()}>
               <SearchIcon className="size-3.5" />

@@ -127,7 +127,7 @@ export function HistoryList({
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               placeholder="Passphrase để sync cloud..."
-              className="h-7 text-xs flex-1"
+              className="h-7 text-base flex-1"
               disabled={isAuthenticating}
             />
             <Button
