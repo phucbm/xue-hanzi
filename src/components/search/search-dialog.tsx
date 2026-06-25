@@ -23,7 +23,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { PenLineIcon, SearchIcon } from "lucide-react"
+import { PenLineIcon, SearchIcon, XIcon } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -154,20 +154,31 @@ export function SearchDialog({ open, onOpenChange, onSelect, recentWordLabels = 
           mode === "draw" && "hidden lg:flex"
         )}>
           <div className="flex items-center gap-2 px-3 py-2 border-b shrink-0">
-            <input
-              ref={inputRef}
-              type="text"
-              value={query}
-              onChange={(e) => {
-                const v = e.target.value
-                setQuery(v)
-                setSearched(false)
-                if (!v) setResults([])
-              }}
-              onKeyDown={handleKeyDown}
-              placeholder="Nhập chữ Hán, pinyin, Hán Việt..."
-              className="flex-1 min-w-0 bg-transparent text-base outline-none placeholder:text-muted-foreground py-1 font-chinese"
-            />
+            <div className="relative flex-1 min-w-0">
+              <input
+                ref={inputRef}
+                type="text"
+                value={query}
+                onChange={(e) => {
+                  const v = e.target.value
+                  setQuery(v)
+                  setSearched(false)
+                  if (!v) setResults([])
+                }}
+                onKeyDown={handleKeyDown}
+                placeholder="Nhập chữ Hán, pinyin, Hán Việt..."
+                className="w-full bg-transparent text-base outline-none placeholder:text-muted-foreground py-1 pr-7 font-chinese"
+              />
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-label="Xóa"
+                onClick={() => { setQuery(""); setResults([]); setSearched(false); inputRef.current?.focus() }}
+                className={`absolute right-0 top-1/2 -translate-y-1/2 p-1 text-muted-foreground transition-opacity ${query ? "opacity-60 hover:opacity-100 cursor-pointer" : "opacity-20 pointer-events-none"}`}
+              >
+                <XIcon className="size-3.5" />
+              </button>
+            </div>
             <Button size="sm" onClick={runSearch} disabled={!query.trim()}>
               <SearchIcon className="size-3.5" />
               Tìm
