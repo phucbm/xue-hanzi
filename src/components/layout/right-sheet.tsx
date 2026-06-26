@@ -39,7 +39,7 @@ export function RightSheet({
 }: RightSheetProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-80 p-0 flex flex-col gap-0 overflow-hidden">
+      <SheetContent side="right" className="data-[side=right]:w-full data-[side=right]:sm:max-w-none data-[side=right]:sm:w-[420px] p-0 flex flex-col gap-0 overflow-hidden">
 
         <SheetHeader className="px-4 py-3! border-b shrink-0">
           <SheetTitle className="text-sm font-semibold">Lịch sử</SheetTitle>
