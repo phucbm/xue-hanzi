@@ -66,24 +66,6 @@ export function HistoryGroupList({ entries, entryMap, onSelect, onRemove }: Prop
     return () => sc.removeEventListener("scroll", onScroll);
   }, []);
 
-  // Re-run spy when older section expands (new DOM element enters)
-  useEffect(() => {
-    const sc = scrollContainerRef.current;
-    if (!sc) return;
-    const chipsH = chipsRef.current?.offsetHeight ?? 0;
-    const containerRect = sc.getBoundingClientRect();
-    const threshold = containerRect.top + chipsH + 8;
-
-    let active: string | null = null;
-    for (const [key, el] of groupEls.current) {
-      if (el.getBoundingClientRect().top <= threshold) active = key;
-    }
-    if (olderRef.current && olderRef.current.getBoundingClientRect().top <= threshold) {
-      active = "older";
-    }
-    setActiveGroup(active);
-  }, [showOlder]);
-
   // Scroll active chip into view
   useEffect(() => {
     if (!activeGroup) return;
@@ -100,14 +82,7 @@ export function HistoryGroupList({ entries, entryMap, onSelect, onRemove }: Prop
     const chipsH = chipsRef.current?.offsetHeight ?? 0;
 
     if (key === "older") {
-      if (!showOlder) {
-        setShowOlder(true);
-        setTimeout(() => {
-          if (olderRef.current) scrollToEl(olderRef.current, sc, chipsH);
-        }, 50);
-      } else if (olderRef.current) {
-        scrollToEl(olderRef.current, sc, chipsH);
-      }
+      if (olderRef.current) scrollToEl(olderRef.current, sc, chipsH);
       return;
     }
 
