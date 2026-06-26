@@ -91,6 +91,6 @@ export function scrollToEl(el: HTMLElement, container: HTMLElement, offset: numb
   const containerRect = container.getBoundingClientRect();
   container.scrollTo({
     top: container.scrollTop + elRect.top - containerRect.top - offset - 4,
-    behavior: "smooth",
+    behavior: "instant",
   });
 }
