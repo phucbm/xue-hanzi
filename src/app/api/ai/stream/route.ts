@@ -4,7 +4,8 @@ import { readFile } from "fs/promises";
 import path from "path";
 import { db, initSchema } from "@/lib/turso";
 import { IP_DAILY_LIMIT, AI_WINDOW_MS } from "@/lib/aiConstants";
-import { isAllowedModel, getDefaultModel } from "@/lib/aiModels";
+import { isAllowedModel, isPaidModel, getDefaultModel } from "@/lib/aiModels";
+import { verifyHistoryPassphrase } from "@/lib/historyAuth";
 import { observe, propagateAttributes, setActiveTraceIO, LangfuseOtelSpanAttributes } from "@langfuse/tracing";
 import { context, trace } from "@opentelemetry/api";
 import { langfuseSpanProcessor } from "@/instrumentation";
@@ -48,7 +49,11 @@ function extractTextFromSseChunk(chunk: string): string {
 const handler = async (req: NextRequest) => {
   const ip = getClientIp(req);
   const body = await req.json();
-  const resolvedModel = (isAllowedModel(body.modelId) ? body.modelId : null) ?? getDefaultModel().id;
+  const requestedModel = body.modelId as string | undefined;
+  if (isPaidModel(requestedModel) && !verifyHistoryPassphrase(req)) {
+    return new Response("Cần đăng nhập để dùng model trả phí.", { status: 401 });
+  }
+  const resolvedModel = (isAllowedModel(requestedModel) ? requestedModel : null) ?? getDefaultModel().id;
 
   // capture observe()'s root span BEFORE propagateAttributes nests further
   const rootCtx = context.active();

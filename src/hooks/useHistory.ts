@@ -2,10 +2,10 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { HistoryEntry } from "@/core/types";
+import { PASSPHRASE_KEY, setPassphrase as storePassphrase, clearPassphrase, authHeader } from "@/lib/passphrase";
 
 const STORAGE_KEY = "hch_history";
 const OLD_KEY = "hch_viewed_words";
-const PASSPHRASE_KEY = "hch_passphrase";
 const MAX = 100;
 const CLOUD_MAX = 500;
 
@@ -70,10 +70,6 @@ function migrate(existing: HistoryEntry[]): HistoryEntry[] {
   }
 }
 
-function authHeader(pass: string): HeadersInit {
-  return { Authorization: `Bearer ${pass}` };
-}
-
 function mergeWithCloud(local: HistoryEntry[], cloud: HistoryEntry[]): HistoryEntry[] {
   const merged = new Map<string, HistoryEntry>();
   for (const e of local) merged.set(e.id, e);
@@ -117,7 +113,7 @@ export function useHistory() {
       const res = await fetch("/api/history", { headers: authHeader(pass) });
       if (!res.ok) {
         if (res.status === 401) {
-          localStorage.removeItem(PASSPHRASE_KEY);
+          clearPassphrase();
           setPassphrase(null);
           passphraseRef.current = null;
         }
@@ -140,7 +136,7 @@ export function useHistory() {
     const stored = readStorage();
     const migrated = stored.length === 0 ? migrate(stored) : stored;
     setHistory(migrated);
-    const savedPass = localStorage.getItem(PASSPHRASE_KEY);
+    const savedPass = localStorage.getItem(PASSPHRASE_KEY); // read via key; passphrase.ts manages writes
     if (savedPass) {
       setPassphrase(savedPass);
       passphraseRef.current = savedPass;
@@ -227,7 +223,7 @@ export function useHistory() {
           headers: authHeader(pass),
         });
         if (!res.ok) return false;
-        localStorage.setItem(PASSPHRASE_KEY, pass);
+        storePassphrase(pass);
         setPassphrase(pass);
         passphraseRef.current = pass;
         await syncFromCloud(pass);
@@ -240,7 +236,7 @@ export function useHistory() {
   );
 
   const logout = useCallback(() => {
-    localStorage.removeItem(PASSPHRASE_KEY);
+    clearPassphrase();
     setPassphrase(null);
     passphraseRef.current = null;
     setIsSynced(false);
