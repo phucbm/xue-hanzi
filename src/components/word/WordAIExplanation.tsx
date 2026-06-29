@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { streamWordAnalysis } from "@/lib/groq";
+import { streamWordAnalysis, type StreamUsage } from "@/lib/openrouter";
 import {
   getAiExplanation,
   saveAiExplanation,
@@ -25,10 +25,17 @@ import { Check, ChevronDown, Copy, ExternalLink, Loader2, Sparkles } from "lucid
 import { IconAlertTriangle } from "@tabler/icons-react";
 import { MovingBorder } from "@/components/phucbm/moving-border";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AI_MODELS, getDefaultModel, getModelById, type AiModel } from "@/lib/aiModels";
+import { AI_MODELS, getDefaultModel, getModelById, calcCost, type AiModel } from "@/lib/aiModels";
+import { getPassphrase } from "@/lib/passphrase";
 
 const AI_MODEL_STORAGE_KEY = "hch_selected_ai_model";
 const AI_MODEL_ERRORS_KEY = "hch_ai_model_errors";
+
+function formatPrice(perToken: number): string {
+  const per1M = perToken * 1_000_000;
+  if (per1M === 0) return "$0";
+  return `$${per1M < 1 ? per1M.toFixed(2) : per1M.toFixed(0)}`;
+}
 
 function getSavedModel(): AiModel {
   if (typeof window === "undefined") return getDefaultModel();
@@ -112,6 +119,38 @@ function relativeTime(iso: string): string {
   return new Date(iso).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" });
 }
 
+function ModelMenuItem({ m, selected, error, onSelect, showPrice }: {
+  m: AiModel;
+  selected: boolean;
+  error?: string;
+  onSelect: (m: AiModel) => void;
+  showPrice: boolean;
+}) {
+  return (
+    <DropdownMenuItem
+      onClick={() => onSelect(m)}
+      className="flex items-center justify-between gap-2"
+      title={error ?? undefined}
+    >
+      <span className="flex items-center gap-1.5 font-medium text-xs min-w-0 truncate">
+        {error && <IconAlertTriangle className="h-3.5 w-3.5 shrink-0 text-destructive" />}
+        {m.label}
+        <span className="text-muted-foreground font-normal">{m.provider}</span>
+      </span>
+      <span className="flex items-center gap-1 shrink-0 text-[10px] text-muted-foreground font-mono">
+        {showPrice && (
+          <>
+            <span title="input per 1M tokens">{formatPrice(m.pricing.promptPerToken)}</span>
+            <span>/</span>
+            <span title="output per 1M tokens">{formatPrice(m.pricing.completionPerToken)}</span>
+          </>
+        )}
+        {selected && <Check className="h-3.5 w-3.5 ml-1 text-foreground" />}
+      </span>
+    </DropdownMenuItem>
+  );
+}
+
 interface WordAIExplanationProps {
   simp: string;
   trad?: string;
@@ -130,6 +169,9 @@ export function WordAIExplanation({ simp, trad, wordEntry, recentWords }: WordAI
   const [cached, setCached] = useState<AiExplanation | null | undefined>(undefined);
   const [selectedModel, setSelectedModel] = useState<AiModel>(getSavedModel);
   const [modelErrors, setModelErrors] = useState<Record<string, string>>(getModelErrors);
+  const [lastUsage, setLastUsage] = useState<StreamUsage | null>(null);
+  const isLoggedIn = !!getPassphrase();
+  const visibleModels = AI_MODELS.filter((m) => !m.paid || isLoggedIn);
 
   function handleSelectModel(m: AiModel) {
     setSelectedModel(m);
@@ -179,9 +221,10 @@ export function WordAIExplanation({ simp, trad, wordEntry, recentWords }: WordAI
     setStatus("loading");
     setStreamContent("");
     setError("");
+    setLastUsage(null);
 
     try {
-      const { model: aiModel, stream } = await streamWordAnalysis(simp, trad, dictContext, recentWords, selectedModel.id);
+      const { model: aiModel, stream, usage } = await streamWordAnalysis(simp, trad, dictContext, recentWords, selectedModel.id, getPassphrase() ?? undefined);
       setStatus("streaming");
 
       let full = "";
@@ -189,6 +232,9 @@ export function WordAIExplanation({ simp, trad, wordEntry, recentWords }: WordAI
         full += chunk;
         setStreamContent(full);
       }
+
+      const u = await usage;
+      if (u) setLastUsage(u);
 
       await saveAiExplanation(simp, full, aiModel);
       void trackAiCall();
@@ -294,31 +340,24 @@ export function WordAIExplanation({ simp, trad, wordEntry, recentWords }: WordAI
               >
                 <ChevronDown className="h-3 w-3" />
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64">
-                {Array.from(new Set(AI_MODELS.map((m) => m.provider))).map((provider, idx) => (
-                  <React.Fragment key={provider}>
-                    {idx > 0 && <DropdownMenuSeparator />}
+              <DropdownMenuContent align="end" className="w-72">
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground py-1 px-2">Miễn phí</DropdownMenuLabel>
+                  {visibleModels.filter((m) => !m.paid).map((m) => (
+                    <ModelMenuItem key={m.id} m={m} selected={m.id === selectedModel.id} error={modelErrors[m.id]} onSelect={handleSelectModel} showPrice={false} />
+                  ))}
+                </DropdownMenuGroup>
+                {isLoggedIn && (
+                  <>
+                    <DropdownMenuSeparator />
                     <DropdownMenuGroup>
-                    <DropdownMenuLabel className="text-xs font-normal text-muted-foreground py-1 px-2">{provider}</DropdownMenuLabel>
-                    {AI_MODELS.filter((m) => m.provider === provider).map((m) => (
-                      <DropdownMenuItem
-                        key={m.id}
-                        onClick={() => handleSelectModel(m)}
-                        className="flex items-center justify-between gap-4"
-                        title={modelErrors[m.id] ?? undefined}
-                      >
-                        <span className="flex items-center gap-1.5 font-medium text-xs">
-                          {modelErrors[m.id] && (
-                            <IconAlertTriangle className="h-3.5 w-3.5 shrink-0 text-destructive" />
-                          )}
-                          {m.label}
-                        </span>
-                        {m.id === selectedModel.id && <Check className="h-3.5 w-3.5 shrink-0" />}
-                      </DropdownMenuItem>
-                    ))}
+                      <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground py-1 px-2">Trả phí</DropdownMenuLabel>
+                      {visibleModels.filter((m) => m.paid).map((m) => (
+                        <ModelMenuItem key={m.id} m={m} selected={m.id === selectedModel.id} error={modelErrors[m.id]} onSelect={handleSelectModel} showPrice />
+                      ))}
                     </DropdownMenuGroup>
-                  </React.Fragment>
-                ))}
+                  </>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </ButtonGroup>
@@ -379,7 +418,13 @@ export function WordAIExplanation({ simp, trad, wordEntry, recentWords }: WordAI
               <p className="text-xs text-muted-foreground">
                 AI{cached && !isRunning
                   ? ` · ${relativeTime(cached.generatedAt)} · bởi cộng đồng · ${cached.model}`
-                  : isRunning ? ` · ${selectedModel.label}` : ""} - nội dung được tạo bởi AI, có thể không chính xác và chỉ để tham khảo.
+                  : isRunning ? ` · ${selectedModel.label}` : ""}
+                {lastUsage && !isRunning && (() => {
+                  const cost = calcCost(selectedModel.id, lastUsage.tokensIn, lastUsage.tokensOut);
+                  const vnd = Math.round(cost * 26000);
+                  return ` · ${lastUsage.tokensIn + lastUsage.tokensOut} tokens${cost > 0 ? ` · ${vnd > 0 ? `${vnd.toLocaleString("vi-VN")}₫` : "<1₫"}` : ""}`;
+                })()}
+                {" "}- nội dung được tạo bởi AI, có thể không chính xác và chỉ để tham khảo.
               </p>
             </div>
           </div>
