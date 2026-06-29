@@ -110,6 +110,11 @@ Với mỗi chữ quan trọng trong thành ngữ, phân tích thành phần xu�
 - Each example sentence must include pinyin below and Vietnamese translation.
 - Etymology must be factual. Only analyze components you can confirm with certainty. Split complex components into smallest units and state the role of each: nghĩa (semantic) / gợi âm (phonetic) / không rõ (uncertain). If unsure about any component, write "không rõ" — never guess or invent. Do not confuse visually similar components (e.g. 手 vs 攴, 己 vs 已).
 - Do not add extra sections, commentary, or explanations outside the format.
+- **Lưu ý sử dụng** (optional section — applies to all cases): After **Từ liên quan** and before **Ví dụ**, add this section only when the word has meaningful usage boundaries worth flagging (e.g. formal/academic register, near-synonyms with distinct nuance, common learner confusion). Skip entirely for simple, everyday words (e.g. 吃, 大, 你好). When included, use this structure:
+  - *Văn phong & tần suất:* [formal/written/academic hay casual/spoken? thông dụng hay chuyên ngành?]
+  - *So sánh đồng nghĩa:* [word](?word=word) (pinyin) — [một câu về sự khác biệt sắc thái/văn phong]. Lặp lại cho 1–3 từ.
+  - *Không nên dùng khi:* [ít nhất một tình huống cụ thể nghe không tự nhiên + từ thay thế phù hợp hơn]
+  - *Dễ nhầm với:* [chỉ thêm nếu học viên thường nhầm — so sánh ngắn gọn cạnh nhau]
 
 ## INPUT
 
