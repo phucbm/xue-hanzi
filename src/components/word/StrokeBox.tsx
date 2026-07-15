@@ -109,7 +109,7 @@ export function StrokeBox({ simp, trad, defaultTrad = false }: StrokeBoxProps) {
   }, [character]);
 
   return (
-    <div className={`rounded-xl bg-muted p-4 flex flex-col items-center gap-3 relative ${available ? "" : "hidden"}`}>
+    <div className={`stroke-box rounded-xl bg-muted sm:p-4 p-3 flex flex-col justify-between items-center gap-3 relative ${available ? "" : "hidden"}`}>
       <p className="text-sm text-muted-foreground text-center">
         Nét chữ{charData ? ` · ${charData.count} nét` : ""}
       </p>
@@ -120,7 +120,21 @@ export function StrokeBox({ simp, trad, defaultTrad = false }: StrokeBoxProps) {
         style={{ width: 140, height: 140 }}
         aria-label={`Hoạt ảnh nét chữ: ${character}`}
       />
-      <div className="absolute top-0 right-0 z-20 p-2 flex flex-col gap-1">
+
+      <div className="flex items-center gap-0.5 flex-wrap">
+        {tradAvailable && (
+          <div className="flex items-center gap-2 mr-1">
+            <Label htmlFor={`stroke-${simp}-toggle`} className="text-xs text-muted-foreground">
+              {useTrad ? "Phồn" : "Giản"}
+            </Label>
+            <Switch
+              id={`stroke-${simp}-toggle`}
+              checked={useTrad}
+              onCheckedChange={setUseTrad}
+              size="sm"
+            />
+          </div>
+        )}
         <Button
           variant="ghost"
           size="icon"
@@ -144,18 +158,7 @@ export function StrokeBox({ simp, trad, defaultTrad = false }: StrokeBoxProps) {
           </Button>
         )}
       </div>
-      {tradAvailable && (
-        <div className="flex items-center gap-2">
-          <Label htmlFor={`stroke-${simp}-toggle`} className="text-xs text-muted-foreground">
-            {useTrad ? "Phồn thể" : "Giản thể"}
-          </Label>
-          <Switch
-            id={`stroke-${simp}-toggle`}
-            checked={useTrad}
-            onCheckedChange={setUseTrad}
-          />
-        </div>
-      )}
+
       {charData && (
         <StrokeOrderDialog
           strokes={charData.strokes}
