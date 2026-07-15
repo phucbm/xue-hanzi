@@ -21,7 +21,7 @@ export function WordInfoBox({ entry }: WordInfoBoxProps) {
 
   return (
     <>
-      <div className="relative w-full rounded-xl bg-muted p-5">
+      <div className="info-box relative w-full flex flex-col justify-between rounded-xl bg-muted sm:p-4 p-3">
 
         {/* Giản thể / Phồn thể */}
           <div className="flex flex-wrap justify-evenly gap-3 mb-5">
@@ -45,19 +45,21 @@ export function WordInfoBox({ entry }: WordInfoBoxProps) {
         </div>
 
         {/* Bính âm / Hán Việt */}
-          <p className="text-sm text-muted-foreground mb-1 text-center">
-          Bính âm - Hán Việt
-        </p>
-          <div className="flex items-baseline justify-center gap-3 text-center">
-          <span className="text-xl text-muted-foreground">{entry.pinyin}</span>
-          {displaySino ? (
-            <span className={`text-xl font-medium ${isMultiChar ? "text-primary/60 italic" : "text-primary"}`}>
+          <div>
+            <p className="text-sm text-muted-foreground mb-1 text-center">
+              Bính âm - Hán Việt
+            </p>
+            <div className="flex items-baseline justify-center gap-3 text-center">
+              <span className="text-xl text-muted-foreground">{entry.pinyin}</span>
+              {displaySino ? (
+                <span className={`text-xl font-medium ${isMultiChar ? "text-primary/60 italic" : "text-primary"}`}>
               {displaySino}
             </span>
-          ) : (
-            <span className="text-sm text-muted-foreground italic font-chinese">[{entry.simp}]</span>
-          )}
-        </div>
+              ) : (
+                <span className="text-sm text-muted-foreground italic font-chinese">[{entry.simp}]</span>
+              )}
+            </div>
+          </div>
       </div>
     </>
   );

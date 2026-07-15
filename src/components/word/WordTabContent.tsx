@@ -65,7 +65,7 @@ export function WordTabContent({ entry, onWordClick, recentWords }: WordTabConte
                     </Button>
                 </div>
 
-                <div className="grid gap-4" style={{ gridTemplateColumns: isSingleChar ? "1fr 1fr" : "1fr" }}>
+                <div className="grid sm:gap-4 gap-2" style={{ gridTemplateColumns: isSingleChar ? "1fr 1fr" : "1fr" }}>
                     <WordInfoBox entry={entry}/>
                     {isSingleChar && <StrokeBox simp={entry.simp} trad={entry.trad} defaultTrad={!!entry.key}/>}
                 </div>
