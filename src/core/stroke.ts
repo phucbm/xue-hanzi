@@ -8,22 +8,29 @@
 
 import HanziWriter from "hanzi-writer";
 
+export const STROKE_COLORS = {
+  stroke: "#374151",   // completed stroke
+  outline: "#9ca3af", // future stroke
+  highlight: "#3b82f6", // current / radical
+} as const;
+
 /** Default stroke animation configuration */
 export const STROKE_CONFIG = {
   width: 140,
   height: 140,
   padding: 5,
   showOutline: true,
-  strokeColor: "#1a1a1a",
-  outlineColor: "#e5e7eb",
-  drawingColor: "#ef4444",
+  strokeColor: STROKE_COLORS.stroke,
+  outlineColor: STROKE_COLORS.outline,
+  drawingColor: STROKE_COLORS.highlight,
   delayBetweenStrokes: 300,
   strokeAnimationSpeed: 1,
-  radicalColor: "#ef4444",
+  radicalColor: STROKE_COLORS.highlight,
 } as const;
 
 export type StrokeConfig = Partial<typeof STROKE_CONFIG> & {
   onLoadCharDataError?: () => void;
+  onLoadCharDataSuccess?: (data: { strokes: string[] }) => void;
 };
 
 /**
