@@ -10,7 +10,8 @@ import { Plus, ChevronRight, Ban } from "lucide-react";
 import { toast } from "sonner";
 import { createDeck, getDecks } from "@/app/actions/flashcards";
 import { cn } from "@/lib/utils";
-import type { DeckListItem, MasteryTier } from "@/core/flashcard-types";
+import { timeAgo } from "@/components/layout/history/utils";
+import { daysUntil, type DeckListItem, type MasteryTier } from "@/core/flashcard-types";
 
 interface DeckListProps {
   initialDecks: DeckListItem[];
@@ -19,6 +20,13 @@ interface DeckListProps {
 function formatScore(score: number | null): string | null {
   if (score === null) return null;
   return `${Math.round(score * 100)}%`;
+}
+
+/** "còn N ngày" / "ngày mai" for a future due_at — only ever called when
+ * count === 0, so the date is guaranteed to be in the future. */
+function formatNextDue(dueAt: string): string {
+  const days = daysUntil(dueAt);
+  return days === 1 ? "ngày mai" : `còn ${days} ngày`;
 }
 
 /** Same 3 tiers/colors as the dashboard's mastery bar — kept in sync so a
@@ -37,20 +45,27 @@ const FLUENCY_DOT: Record<MasteryTier, string> = {
 function DeckRow({ deck, manage }: { deck: DeckListItem; manage?: boolean }) {
   const score = formatScore(deck.lastScore);
   const { tier, ratio } = deck.fluency;
+  const fluencyPct = tier ? Math.round((ratio ?? 0) * 100) : null;
+
   return (
     <div className={cn("flex items-center justify-between gap-3 px-4 py-3", tier && FLUENCY_BG[tier])}>
       <div className="min-w-0 flex items-center gap-2.5">
-        {tier && (
-          <span
-            className={cn("h-2 w-2 rounded-full shrink-0", FLUENCY_DOT[tier])}
-            title={`Mức độ thành thạo trung bình: ${Math.round((ratio ?? 0) * 100)}%`}
-          />
-        )}
+        {tier && <span className={cn("h-2 w-2 rounded-full shrink-0", FLUENCY_DOT[tier])} />}
         <div className="min-w-0">
           <p className="text-sm font-medium truncate">{deck.title}</p>
           <p className="text-xs text-muted-foreground">
-            {deck.count} từ cần ôn{score ? ` · Lần trước: ${score}` : ""}
+            {deck.total} từ
+            {deck.count > 0
+              ? ` · ${deck.count} cần ôn`
+              : deck.nextDueAt && ` · ${formatNextDue(deck.nextDueAt)}`}
+            {fluencyPct !== null && fluencyPct > 0 && ` · Thành thạo ${fluencyPct}%`}
           </p>
+          {score && deck.lastSessionAt && (
+            <p className="text-xs text-muted-foreground">
+              Lần trước: {score} ({timeAgo(new Date(deck.lastSessionAt).getTime())})
+              {deck.lastSessionAheadOfSchedule && " · luyện tập"}
+            </p>
+          )}
         </div>
       </div>
       <div className="flex items-center gap-1.5 shrink-0">
@@ -62,7 +77,7 @@ function DeckRow({ deck, manage }: { deck: DeckListItem; manage?: boolean }) {
         <Button
           size="sm"
           className="h-7 px-2.5 text-xs"
-          disabled={deck.count === 0}
+          disabled={deck.total === 0}
           nativeButton={false} render={<Link href={`/flashcards/study?deck=${deck.id}`} />}
         >
           Học

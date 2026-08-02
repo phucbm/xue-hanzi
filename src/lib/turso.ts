@@ -125,19 +125,45 @@ export async function initSchema() {
         total_words        INTEGER NOT NULL,
         passed_first_try   INTEGER NOT NULL,
         failed_first_try   INTEGER NOT NULL,
-        total_attempts     INTEGER NOT NULL
+        total_attempts     INTEGER NOT NULL,
+        ahead_of_schedule  INTEGER NOT NULL DEFAULT 0
       )`,
       `CREATE INDEX IF NOT EXISTS idx_flashcard_sessions_deck
         ON flashcard_sessions(user_id, deck_label, finished_at DESC)`,
+      // One row per graded review, ever. Stores the raw post-review SM-2
+      // numbers, never a precomputed mastery tier — tier is always derived
+      // from FlashcardEngine.classifyMastery() at read time, so a future
+      // change to MASTERED_INTERVAL_DAYS doesn't silently invalidate history.
+      // counted=0 rows are practice/ahead-of-schedule reviews: the
+      // "_after" columns equal the card's unchanged state, logged only so
+      // a review timeline isn't missing days that were actually studied.
+      `CREATE TABLE IF NOT EXISTS flashcard_review_log (
+        id                   TEXT PRIMARY KEY,
+        user_id              TEXT NOT NULL,
+        card_id              TEXT NOT NULL REFERENCES flashcard_cards(id) ON DELETE CASCADE,
+        session_id           TEXT REFERENCES flashcard_sessions(id) ON DELETE SET NULL,
+        simp                 TEXT NOT NULL,
+        quality              INTEGER NOT NULL,
+        counted              INTEGER NOT NULL,
+        ease_factor_after    REAL NOT NULL,
+        interval_days_after  INTEGER NOT NULL,
+        repetitions_after    INTEGER NOT NULL,
+        lapses_after         INTEGER NOT NULL,
+        reviewed_at          TEXT NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_flashcard_review_log_card
+        ON flashcard_review_log(card_id, reviewed_at DESC)`,
     ],
     "write"
   );
 
   // PRAGMA checks for conditional ALTER TABLE migrations (can't be batched — need the result first).
-  // Run both in parallel to save one round trip.
-  const [tableInfo, groupsInfo] = await Promise.all([
+  // Run in parallel to save round trips.
+  const [tableInfo, groupsInfo, flashcardCardsInfo, flashcardSessionsInfo] = await Promise.all([
     db.execute(`PRAGMA table_info(user_words)`),
     db.execute(`PRAGMA table_info(notebook_groups)`),
+    db.execute(`PRAGMA table_info(flashcard_cards)`),
+    db.execute(`PRAGMA table_info(flashcard_sessions)`),
   ]);
 
   const existingCols = new Set(
@@ -145,6 +171,12 @@ export async function initSchema() {
   );
   const groupCols = new Set(
     groupsInfo.rows.map((r) => (r as Record<string, unknown>).name as string)
+  );
+  const flashcardCardsCols = new Set(
+    flashcardCardsInfo.rows.map((r) => (r as Record<string, unknown>).name as string)
+  );
+  const flashcardSessionsCols = new Set(
+    flashcardSessionsInfo.rows.map((r) => (r as Record<string, unknown>).name as string)
   );
 
   const alterStmts: string[] = [];
@@ -159,6 +191,16 @@ export async function initSchema() {
   }
   if (!groupCols.has("slug")) {
     alterStmts.push(`ALTER TABLE notebook_groups ADD COLUMN slug TEXT`);
+  }
+  if (!flashcardCardsCols.has("flagged_hard_at")) {
+    // Manual "mark as hard" flag — merged into the leech bucket
+    // (FlashcardEngine.isLeech), independent of the auto-detected lapse count.
+    alterStmts.push(`ALTER TABLE flashcard_cards ADD COLUMN flagged_hard_at TEXT`);
+  }
+  if (!flashcardSessionsCols.has("ahead_of_schedule")) {
+    // Practice sessions (studied before anything was actually due) vs real
+    // ones — real sessions advance flashcard_cards state, practice ones don't.
+    alterStmts.push(`ALTER TABLE flashcard_sessions ADD COLUMN ahead_of_schedule INTEGER NOT NULL DEFAULT 0`);
   }
   if (alterStmts.length > 0) {
     await db.batch(alterStmts, "write");

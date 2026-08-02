@@ -12,15 +12,24 @@ import { AppLayoutWithHistory } from "@/components/layout/AppLayoutWithHistory";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { WordInfoBox } from "@/components/word/WordInfoBox";
-import { StrokeBox } from "@/components/word/StrokeBox";
+import { WordTabContent } from "@/components/word/WordTabContent";
 import { getWordEntries } from "@/app/actions";
-import { getDecks, startSession, submitSession } from "@/app/actions/flashcards";
+import { getDecks, getDeckMetrics, startSession, submitSession } from "@/app/actions/flashcards";
 import { gradeCard, type SrsQuality } from "@/core/srs";
-import type { SessionQueueCard, SessionResult } from "@/core/flashcard-types";
+import { daysUntil, isAutoDeckId, type SessionQueueCard, type SessionResult } from "@/core/flashcard-types";
+import type { DeckMetrics } from "@/core/flashcard-engine";
 import type { WordEntry } from "@/core/types";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+
+/** "Cần học lại vào ngày mai" / "Cần học lại trong N ngày nữa" — phrased for
+ * the start-screen metrics card (contrast DeckList's terser "ngày mai" /
+ * "còn N ngày" row caption). Both derive from the same daysUntil() so the
+ * day count itself never disagrees between the two screens. */
+function formatNextDueMessage(dueAt: string): string {
+  const days = daysUntil(dueAt);
+  return days === 1 ? "Cần học lại vào ngày mai" : `Cần học lại trong ${days} ngày nữa`;
+}
 
 interface StudySessionProps {
   deckId: string;
@@ -43,6 +52,8 @@ export function StudySession({ deckId }: StudySessionProps) {
   const [deckTitle, setDeckTitle] = useState(deckId);
   const [fullQueue, setFullQueue] = useState<SessionQueueCard[]>([]);
   const [sessionSize, setSessionSize] = useState<number>(0);
+  const [aheadOfSchedule, setAheadOfSchedule] = useState(false);
+  const [metrics, setMetrics] = useState<DeckMetrics | null>(null);
 
   const [queue, setQueue] = useState<SessionQueueCard[]>([]);
   const [totalWords, setTotalWords] = useState(0);
@@ -59,12 +70,18 @@ export function StudySession({ deckId }: StudySessionProps) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [decks, queueResult] = await Promise.all([getDecks(), startSession(deckId)]);
+      const [decks, sessionResult, deckMetrics] = await Promise.all([
+        getDecks(),
+        startSession(deckId),
+        getDeckMetrics(deckId),
+      ]);
       if (cancelled) return;
       const found = decks.find((d) => d.id === deckId);
       setDeckTitle(found?.title ?? deckId);
-      setFullQueue(queueResult);
-      setSessionSize(queueResult.length);
+      setFullQueue(sessionResult.queue);
+      setSessionSize(sessionResult.queue.length);
+      setAheadOfSchedule(sessionResult.aheadOfSchedule);
+      setMetrics(deckMetrics);
       setPhase("start");
     })();
     return () => {
@@ -109,17 +126,21 @@ export function StudySession({ deckId }: StudySessionProps) {
     try {
       await submitSession({
         deckId,
-        deckLabel: deckTitle,
+        // Auto decks are looked up by their stable descriptor ("hsk:1"), not
+        // the display title ("HSK 1") — only manual decks (matched by
+        // deckId elsewhere) get the human-readable name here.
+        deckLabel: isAutoDeckId(deckId) ? deckId : deckTitle,
         startedAt: startedAtRef.current,
         finishedAt: new Date().toISOString(),
         results: [...gradedRef.current.values()],
         totalAttempts,
+        aheadOfSchedule,
       });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
     }
     setPhase("done");
-  }, [deckId, deckTitle, totalAttempts]);
+  }, [deckId, deckTitle, totalAttempts, aheadOfSchedule]);
 
   useEffect(() => {
     if (phase !== "running") return;
@@ -155,7 +176,19 @@ export function StudySession({ deckId }: StudySessionProps) {
     setCurrentEntry(null);
   }
 
+  // Related/etymology words inside the revealed WordTabContent open in a new
+  // tab — navigating away mid-session would abandon the in-memory queue.
+  function handleExploreWord(exploreSimp: string) {
+    window.open(`/word/${encodeURIComponent(exploreSimp)}`, "_blank", "noopener,noreferrer");
+  }
+
   const gradedCount = gradedRef.current.size;
+
+  const practiceModeBadge = aheadOfSchedule && (
+    <span className="text-xs px-2 py-0.5 rounded-full bg-mastery-learning/15 text-mastery-learning font-medium shrink-0">
+      Chế độ luyện tập — không ảnh hưởng lịch ôn tập
+    </span>
+  );
 
   return (
     <AppLayoutWithHistory>
@@ -169,9 +202,57 @@ export function StudySession({ deckId }: StudySessionProps) {
         {phase === "start" && (
           <>
             <h1 className="text-xl font-bold">{deckTitle}</h1>
+
+            {metrics && metrics.total > 0 && (
+              <Card className="p-4 gap-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    {metrics.total} từ · {metrics.dueToday} cần ôn hôm nay
+                  </span>
+                  {metrics.leechCount > 0 && (
+                    <span className="text-xs text-destructive font-medium">{metrics.leechCount} từ khó</span>
+                  )}
+                </div>
+                {metrics.dueToday === 0 && metrics.nextDueAt && (
+                  <p className="text-xs text-muted-foreground">{formatNextDueMessage(metrics.nextDueAt)}</p>
+                )}
+                <div className="flex h-2 w-full rounded-full overflow-hidden gap-0.5 bg-muted">
+                  {metrics.mastery.new > 0 && (
+                    <div
+                      className="h-full bg-muted-foreground"
+                      style={{ width: `${(metrics.mastery.new / metrics.total) * 100}%` }}
+                    />
+                  )}
+                  {metrics.mastery.learning > 0 && (
+                    <div
+                      className="h-full bg-mastery-learning"
+                      style={{ width: `${(metrics.mastery.learning / metrics.total) * 100}%` }}
+                    />
+                  )}
+                  {metrics.mastery.mastered > 0 && (
+                    <div
+                      className="h-full bg-mastery-mastered"
+                      style={{ width: `${(metrics.mastery.mastered / metrics.total) * 100}%` }}
+                    />
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-muted-foreground" /> Mới ({metrics.mastery.new})
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-mastery-learning" /> Đang học ({metrics.mastery.learning})
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-mastery-mastered" /> Thành thạo ({metrics.mastery.mastered})
+                  </span>
+                </div>
+              </Card>
+            )}
+
             {fullQueue.length === 0 ? (
               <Card className="p-6 flex flex-col items-center gap-3 text-center">
-                <p className="text-sm text-muted-foreground">Không có từ nào cần ôn trong bộ thẻ này.</p>
+                <p className="text-sm text-muted-foreground">Chưa có từ nào trong bộ thẻ này.</p>
                 <Button size="sm" nativeButton={false} render={<Link href="/flashcards" />}>
                   Quay lại
                 </Button>
@@ -179,7 +260,17 @@ export function StudySession({ deckId }: StudySessionProps) {
             ) : (
               <Card className="p-6 flex flex-col gap-4">
                 <p className="text-sm text-muted-foreground">
-                  Có <span className="font-medium text-foreground">{fullQueue.length}</span> từ cần ôn.
+                  {aheadOfSchedule ? (
+                    <>
+                      Không có từ nào đến hạn hôm nay — bạn có thể ôn trước{" "}
+                      <span className="font-medium text-foreground">{fullQueue.length}</span> từ trong bộ này. Đây
+                      là buổi luyện tập: kết quả sẽ không thay đổi lịch ôn tập của các từ, dù bạn trả lời đúng hết.
+                    </>
+                  ) : (
+                    <>
+                      Có <span className="font-medium text-foreground">{fullQueue.length}</span> từ cần ôn.
+                    </>
+                  )}
                 </p>
                 <div className="flex items-center gap-2">
                   <label className="text-sm text-muted-foreground shrink-0">Số từ trong phiên này</label>
@@ -200,33 +291,18 @@ export function StudySession({ deckId }: StudySessionProps) {
 
         {phase === "running" && current && (
           <>
-            <div className="flex items-center justify-between text-sm text-muted-foreground">
-              <span>{deckTitle}</span>
-              <span>
+            <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+              <span className="flex items-center gap-2 min-w-0">
+                <span className="truncate">{deckTitle}</span>
+                {practiceModeBadge}
+              </span>
+              <span className="shrink-0">
                 {gradedCount}/{totalWords}
               </span>
             </div>
 
-            <Card className="p-8 flex flex-col items-center gap-6 min-h-[320px] justify-center">
+            <Card className="p-8 flex flex-col items-center justify-center min-h-[200px]">
               <p className="font-chinese text-5xl font-medium text-center">{current.simp}</p>
-
-              {revealed && (
-                <div className="w-full flex flex-col gap-4">
-                  {loadingEntry && (
-                    <div className="flex justify-center text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    </div>
-                  )}
-                  {currentEntry && (
-                    <>
-                      <WordInfoBox entry={currentEntry} />
-                      {[...currentEntry.simp].length === 1 && /\p{Script=Han}/u.test(currentEntry.simp) && (
-                        <StrokeBox simp={currentEntry.simp} trad={currentEntry.trad} defaultTrad={!!currentEntry.key} />
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
             </Card>
 
             {!revealed ? (
@@ -239,9 +315,18 @@ export function StudySession({ deckId }: StudySessionProps) {
                 </Button>
               </div>
             ) : (
-              <Button size="lg" onClick={handleContinue}>
-                Tiếp tục
-              </Button>
+              <>
+                <Button size="lg" onClick={handleContinue}>
+                  Tiếp tục
+                </Button>
+
+                {loadingEntry && (
+                  <div className="flex justify-center text-muted-foreground py-8">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  </div>
+                )}
+                {currentEntry && <WordTabContent entry={currentEntry} onWordClick={handleExploreWord} />}
+              </>
             )}
           </>
         )}
@@ -249,9 +334,11 @@ export function StudySession({ deckId }: StudySessionProps) {
         {phase === "done" && (
           <Card className="p-8 flex flex-col items-center gap-4 text-center">
             <h2 className="text-lg font-semibold">Hoàn thành!</h2>
+            {practiceModeBadge}
             <p className="text-sm text-muted-foreground">
               {[...gradedRef.current.values()].filter((r) => r.firstQuality === 5).length} / {gradedRef.current.size} từ nhớ ngay lần đầu ·{" "}
               {totalAttempts} lượt trả lời
+              {aheadOfSchedule && " (không thay đổi lịch ôn tập của các từ)"}
             </p>
             <Button nativeButton={false} render={<Link href="/flashcards" />}>Quay lại danh sách</Button>
           </Card>

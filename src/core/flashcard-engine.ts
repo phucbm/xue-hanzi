@@ -42,6 +42,14 @@ export interface SessionLogRow {
   finishedAt: string;
   totalWords: number;
   passedFirstTry: number;
+  aheadOfSchedule: boolean;
+}
+
+/** Score + timestamp of a deck's most recently completed session. */
+interface LastSessionInfo {
+  score: number;
+  finishedAt: string;
+  aheadOfSchedule: boolean;
 }
 
 export interface MasteryBreakdown {
@@ -54,6 +62,21 @@ export interface HskMasteryLevel {
   level: number;
   total: number;
   mastered: number;
+}
+
+/** Metrics scoped to a single deck — shown on the study-session start screen
+ * so a user can decide whether to study without leaving the page. Same
+ * shape of information as SystemMetrics, just filtered to one deck's cards
+ * instead of every active card. */
+export interface DeckMetrics {
+  total: number;
+  dueToday: number;
+  /** Earliest due_at among not-yet-due cards, or null. Only meaningful when
+   * dueToday === 0 — see FlashcardEngine.nextDueAt(). */
+  nextDueAt: string | null;
+  mastery: MasteryBreakdown;
+  leechCount: number;
+  fluency: DeckFluency;
 }
 
 export interface SystemMetrics {
@@ -96,8 +119,10 @@ export class FlashcardEngine {
     return "learning";
   }
 
-  static isLeech(card: Pick<FlashcardCard, "lapses">): boolean {
-    return card.lapses >= LEECH_LAPSE_THRESHOLD;
+  /** Auto-detected (3+ real failures) OR manually flagged — both land in the
+   * same "Từ khó (leech)" bucket, one place for "needs extra attention". */
+  static isLeech(card: Pick<FlashcardCard, "lapses" | "flaggedHardAt">): boolean {
+    return card.lapses >= LEECH_LAPSE_THRESHOLD || card.flaggedHardAt != null;
   }
 
   /** Weighted mastery score for a set of cards (new=0, learning=0.5,
@@ -134,15 +159,30 @@ export class FlashcardEngine {
     return cards.filter((c) => c.dueAt <= now).length;
   }
 
-  private lastScoreMaps(): { byLabel: Map<string, number>; byDeckId: Map<string, number> } {
-    const byLabel = new Map<string, number>();
-    const byDeckId = new Map<string, number>();
+  /** Earliest `due_at` among cards not yet due — only meaningful when
+   * dueCount() is 0 (otherwise "next due" is already "now", conveyed by the
+   * due count itself). Null when the deck has no active cards at all. */
+  private nextDueAt(cards: FlashcardCard[], now: string): string | null {
+    const upcoming = cards.filter((c) => c.dueAt > now).map((c) => c.dueAt);
+    if (upcoming.length === 0) return null;
+    return upcoming.reduce((min, d) => (d < min ? d : min));
+  }
+
+  private lastSessionMaps(): {
+    byLabel: Map<string, LastSessionInfo>;
+    byDeckId: Map<string, LastSessionInfo>;
+  } {
+    const byLabel = new Map<string, LastSessionInfo>();
+    const byDeckId = new Map<string, LastSessionInfo>();
+    // this.sessions is ordered finished_at DESC (see loadEngine()), so the
+    // first match per key is already the most recent one.
     for (const s of this.sessions) {
       const score = s.totalWords > 0 ? s.passedFirstTry / s.totalWords : 0;
+      const info: LastSessionInfo = { score, finishedAt: s.finishedAt, aheadOfSchedule: s.aheadOfSchedule };
       if (s.deckId) {
-        if (!byDeckId.has(s.deckId)) byDeckId.set(s.deckId, score);
+        if (!byDeckId.has(s.deckId)) byDeckId.set(s.deckId, info);
       } else if (!byLabel.has(s.deckLabel)) {
-        byLabel.set(s.deckLabel, score);
+        byLabel.set(s.deckLabel, info);
       }
     }
     return { byLabel, byDeckId };
@@ -176,16 +216,21 @@ export class FlashcardEngine {
 
   getDecks(): DeckListItem[] {
     const now = new Date().toISOString();
-    const { byLabel, byDeckId } = this.lastScoreMaps();
+    const { byLabel, byDeckId } = this.lastSessionMaps();
     const items: DeckListItem[] = [];
 
     const pushAuto = (id: string, title: string, memberCards: FlashcardCard[]) => {
+      const last = byLabel.get(id) ?? null;
       items.push({
         id,
         kind: "auto",
         title,
         count: this.dueCount(memberCards, now),
-        lastScore: byLabel.get(id) ?? null,
+        total: memberCards.length,
+        nextDueAt: this.nextDueAt(memberCards, now),
+        lastScore: last?.score ?? null,
+        lastSessionAt: last?.finishedAt ?? null,
+        lastSessionAheadOfSchedule: last?.aheadOfSchedule ?? false,
         fluency: FlashcardEngine.fluencyOf(memberCards),
       });
     };
@@ -215,12 +260,17 @@ export class FlashcardEngine {
     }
     for (const deck of this.decks) {
       const memberCards = membersByDeck.get(deck.id) ?? [];
+      const last = byDeckId.get(deck.id) ?? null;
       items.push({
         id: deck.id,
         kind: "manual",
         title: deck.title,
         count: this.dueCount(memberCards, now),
-        lastScore: byDeckId.get(deck.id) ?? null,
+        total: memberCards.length,
+        nextDueAt: this.nextDueAt(memberCards, now),
+        lastScore: last?.score ?? null,
+        lastSessionAt: last?.finishedAt ?? null,
+        lastSessionAheadOfSchedule: last?.aheadOfSchedule ?? false,
         fluency: FlashcardEngine.fluencyOf(memberCards),
       });
     }
@@ -230,7 +280,11 @@ export class FlashcardEngine {
       kind: "excluded",
       title: "Đã loại trừ",
       count: this.excludedCards.length,
+      total: this.excludedCards.length,
+      nextDueAt: null,
       lastScore: null,
+      lastSessionAt: null,
+      lastSessionAheadOfSchedule: false,
       fluency: { ratio: null, tier: null },
     });
 
@@ -253,6 +307,21 @@ export class FlashcardEngine {
       this.deckCards.filter((l) => l.deckId === deckId).map((l) => l.cardId)
     );
     return this.active.filter((c) => memberIds.has(c.id));
+  }
+
+  getDeckMetrics(deckId: string): DeckMetrics {
+    const now = new Date().toISOString();
+    const cards = this.getDeckWords(deckId);
+    const mastery: MasteryBreakdown = { new: 0, learning: 0, mastered: 0 };
+    for (const c of cards) mastery[FlashcardEngine.classifyMastery(c)]++;
+    return {
+      total: cards.length,
+      dueToday: this.dueCount(cards, now),
+      nextDueAt: this.nextDueAt(cards, now),
+      mastery,
+      leechCount: cards.filter((c) => FlashcardEngine.isLeech(c)).length,
+      fluency: FlashcardEngine.fluencyOf(cards),
+    };
   }
 
   getSystemMetrics(): SystemMetrics {

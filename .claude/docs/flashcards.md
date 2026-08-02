@@ -24,6 +24,7 @@ CREATE TABLE flashcard_cards (
   last_reviewed_at  TEXT,
   created_at        TEXT NOT NULL,
   excluded_at       TEXT,     -- NULL = active, timestamp = user blacklisted it
+  flagged_hard_at   TEXT,     -- NULL = not flagged, timestamp = user marked it hard
   UNIQUE (user_id, simp)
 );
 
@@ -39,13 +40,48 @@ CREATE TABLE flashcard_sessions (
   id, user_id,
   deck_id, deck_label,   -- deck_id is NULL for auto decks (no FK target — see below)
   started_at, finished_at,
-  total_words, passed_first_try, failed_first_try, total_attempts
+  total_words, passed_first_try, failed_first_try, total_attempts,
+  ahead_of_schedule  INTEGER NOT NULL DEFAULT 0  -- practice session, see below
+);
+
+-- One row per graded review, EVER — the only true history in this feature.
+-- Everything else (flashcard_cards) is current-state-only and gets
+-- overwritten; this table is append-only. Stores raw SM-2 numbers, never a
+-- precomputed mastery tier — see "Review log" below for why.
+CREATE TABLE flashcard_review_log (
+  id, user_id,
+  card_id     TEXT NOT NULL REFERENCES flashcard_cards(id) ON DELETE CASCADE,
+  session_id  TEXT REFERENCES flashcard_sessions(id) ON DELETE SET NULL,
+  simp        TEXT NOT NULL,
+  quality     INTEGER NOT NULL,  -- 2 or 5 (SrsQuality)
+  counted     INTEGER NOT NULL,  -- 1 = real due review, 0 = practice — see below
+  ease_factor_after, interval_days_after, repetitions_after, lapses_after,
+  reviewed_at TEXT NOT NULL
 );
 ```
 
+Note: this app doesn't run with `PRAGMA foreign_keys = ON`, so the `ON DELETE
+CASCADE`/`SET NULL` above are documentation of intent, not enforced by
+SQLite — every delete path (`forgetWord`, `deleteDeck`) does the cascading
+explicitly in application code. Don't rely on the FK alone if you add a new
+delete path; check what else references the row first.
+
 `flashcard_sessions.deck_id` is only set for manual decks; auto decks (e.g.
 `hsk:3`) don't have a row anywhere, so their sessions are identified by
-`deck_label` instead of a foreign key.
+`deck_label` instead of a foreign key. **`deck_label` for an auto deck must
+be the stable descriptor** (`"hsk:1"`, `"all"`, `"leech"`, `"month:2026-08"`)
+**, not the display title** (`"HSK 1"`) — `FlashcardEngine.lastSessionMaps()`
+looks up "last score/session for this deck" by that descriptor. Storing the
+title instead (what `StudySession.tsx` originally did, silently, for every
+auto-deck session) makes the lookup never match, so `DeckListItem.lastScore`/
+`lastSessionAt` stay `null` forever even though sessions completed fine —
+this shipped broken and only surfaced once the deck list started actually
+displaying "last studied" info. `StudySession.tsx`'s `submit()` now branches
+on `isAutoDeckId(deckId)` to decide which one to send; manual decks still get
+the human title (their lookup uses the real `deck_id` FK instead, so the
+label there is genuinely just denormalized display text, per the original
+design). If you ever see `lastScore`/`lastSessionAt` stuck at null for an
+auto deck despite completed sessions, check this first.
 
 ## SM-2 algorithm
 
@@ -95,7 +131,11 @@ not a persisted feature.
   deck membership, but it does mean "% of HSK 3 mastered" is relative to this
   app's own bucketing, not a verified external benchmark. This caveat is
   shown directly in the dashboard UI (not just here) — see Dashboard below.
-- **Leech**: `lapses >= LEECH_LAPSE_THRESHOLD` (3, in `src/core/flashcard-types.ts`).
+- **Leech**: `lapses >= LEECH_LAPSE_THRESHOLD` (3, in `src/core/flashcard-types.ts`) **OR**
+  `flagged_hard_at IS NOT NULL` — manually flagging a word as hard (the
+  "Đánh dấu khó" action, see Word actions below) puts it in the same bucket
+  as auto-detected leeches, on purpose: one place for "needs extra
+  attention," whether the algorithm or the user decided that.
 - **Excluded** (`EXCLUDED_DECK_ID = "excluded"`): a pseudo-deck, not studyable
   — the blacklist-management view (`/flashcards/excluded`), lists
   `excluded_at IS NOT NULL` words with a restore button.
@@ -109,21 +149,159 @@ un-hides it back into exactly the decks it was already in.
 
 ## Study session flow
 
+0. **Start-screen metrics**: before a session begins, `StudySession.tsx`
+   fetches `getDeckMetrics(deckId)` (`FlashcardEngine.getDeckMetrics()`) —
+   the same shape of info as the dashboard's `SystemMetrics` but scoped to
+   this one deck: `total`, `dueToday`, `nextDueAt`, a `mastery` breakdown
+   (new/learning/mastered), and `leechCount`. Rendered as a compact card
+   (mini mastery bar + leech count + next-due line) above the "Bắt đầu"
+   button, so the user can judge whether restudying is worth it without
+   leaving the page. When `dueToday === 0` and `nextDueAt` is set, the card
+   shows **"Cần học lại vào ngày mai"** / **"Cần học lại trong N ngày nữa"**
+   (`formatNextDueMessage()`, built on the shared `daysUntil()` helper in
+   `flashcard-types.ts` — the same helper backs `DeckList.tsx`'s terser
+   "còn N ngày" row caption, so the two screens never disagree on the count).
 1. **Build queue**: due cards for the deck, shuffled. No daily new-card cap —
    the start screen shows the full due count and lets the user optionally
    pick a smaller session size, self-paced rather than system-throttled.
+   **Ahead-of-schedule fallback**: if nothing in the deck is due yet,
+   `startSession` doesn't block the deck — it falls back to every active
+   card in the deck instead (`aheadOfSchedule: true` in `StartSessionResult`,
+   computed once at session start: `pool = due.length === 0 && words.length > 0
+   ? words : due`, so a session's queue is always homogeneous — either all due
+   or all practice, never a mix). Surfaced in the start screen's copy and as a
+   badge during/after the session. **These practice reviews never touch
+   `flashcard_cards`** — see "Real vs. practice reviews" below for why this
+   exists and how it's enforced. A deck's "Học" button is only disabled when
+   it's truly empty (`DeckListItem.total === 0`), never just because nothing
+   is due (`DeckListItem.count === 0`) — those are two different fields on
+   purpose.
 2. **Grade-once rule**: each card's SM-2 update happens on its *first* answer
    only, tracked in memory (`gradedRef` in `StudySession.tsx`).
 3. **Đã nhớ** (first time): grade `q=5`, remove from queue.
-4. **Chưa nhớ?** (first time): reveal full word info, grade `q=2`, reinsert
+4. **Chưa nhớ?** (first time): reveal the **full word detail view**
+   (`WordTabContent` — the same component the word detail page and
+   `/word/[simp]` use: AI explanation, definitions, etymology, related
+   words, stroke animation — not just a stroke box), grade `q=2`, reinsert
    into the queue at a random position with a minimum 3-card gap.
+   `WordTabContent`'s action row also carries the word-actions menu (see
+   below), so flagging/excluding/deleting a word is available right there
+   during review, no need to leave the session. Related/etymology words
+   inside the reveal open in a **new tab** — clicking one doesn't navigate
+   away from (and abandon) the in-memory session queue.
 5. **Reappearance after a fail**: pure reinforcement, no further SM-2 write.
    No retry cap — a word can recycle indefinitely until passed.
 6. **Completion**: queue empty (every word passed at least once).
 7. **Persistence — atomic**: nothing is written during the session. On
-   completion, one `db.batch()` call upserts every touched card's final SM-2
-   state plus one `flashcard_sessions` row. If the app closes mid-session,
-   nothing is saved — not even cards already marked "Đã nhớ".
+   completion, one `db.batch()` call writes one `flashcard_sessions` row plus
+   one `flashcard_review_log` row per graded card — and, only for a real
+   (non-practice) session, an `UPDATE flashcard_cards` per graded card too
+   (see below). If the app closes mid-session, nothing is saved — not even
+   cards already marked "Đã nhớ".
+
+## Real vs. practice reviews — the cramming fix
+
+**The problem this solves**: before `aheadOfSchedule` gated persistence,
+restudying an already-fully-reviewed deck (e.g. running HSK 1 ten times in
+one day, once due count hit 0 thanks to the fallback above) advanced every
+card's SM-2 `interval_days` every single time, since `gradeCard()` has no
+same-day gate. Ten passes in one day could push a card past
+`MASTERED_INTERVAL_DAYS` within the day — "mastered" a word had never
+actually been spaced-repeated. Real SM-2/Anki mastery requires *time between
+reviews*, not just repetition count.
+
+**The fix**: `submitSession` (`app/actions/flashcards.ts`) branches on the
+session's `aheadOfSchedule` flag decided once at `startSession()`:
+
+- **Real session** (`aheadOfSchedule: false`, queue was actually due cards):
+  `UPDATE flashcard_cards SET ease_factor/interval_days/repetitions/lapses/
+  due_at/last_reviewed_at = ...` per card (the client-computed `gradeCard()`
+  output), **and** a `flashcard_review_log` row with `counted = 1` storing
+  that same post-grade state.
+- **Practice session** (`aheadOfSchedule: true`, queue was the "nothing due,
+  study anyway" fallback): **no write to `flashcard_cards` at all** — the
+  client's `gradeCard()` output for these cards is computed (for the
+  in-session UI: pass/fail, reinsertion-on-fail) but silently discarded at
+  submit time. Instead, `submitSession` re-fetches each card's *current*
+  (unchanged) `ease_factor/interval_days/repetitions/lapses` fresh from the
+  DB and writes a `flashcard_review_log` row with `counted = 0` and those
+  unchanged numbers — logging "you reviewed this word, here's where it
+  already stood," not "here's what today's answer changed."
+
+Either way a `flashcard_sessions` row is written (`ahead_of_schedule` column
+mirrors the session-level flag), so streak/heatmap/last-score all still see
+practice sessions as activity — practice is real study time and should count
+toward showing up daily. It just can't fast-forward a card's schedule.
+
+**Net effect**: a card's `due_at` only ever moves forward via a review that
+was actually due. Repeating a deck same-day is honest practice — reinforces
+memory, shows up in history and streak — but never fabricates spacing that
+didn't happen. Getting to "mastered" still requires passing the same card
+across multiple real due-reviews spread over the SM-2-computed intervals
+(1 day → 6 days → growing by `ease` each time), which is the actual SM-2/Anki
+mastery guarantee.
+
+**Degradation over time** (a related but *not yet implemented* idea raised
+during design): a card that reaches `MASTERED_INTERVAL_DAYS` and then isn't
+reviewed again for a long stretch (e.g. 6 months) arguably should demote back
+to "learning" even without a fresh review, since real recall likely decayed.
+Today `classifyMastery()` is purely a function of `interval_days`/
+`repetitions` — there's no time-decay/degrade pass. Not built; flagging it
+here so a future session doesn't have to re-derive the idea from scratch.
+
+## Review log (`flashcard_review_log`)
+
+Append-only history — the only table in this feature that is never
+overwritten, only inserted into (contrast `flashcard_cards`, which is
+current-state-only and gets clobbered every review). One row per graded
+answer, real or practice, holding `quality` (2 or 5), `counted` (1 real / 0
+practice, see above), and the four raw SM-2 fields *as of that row*
+(`ease_factor_after`, `interval_days_after`, `repetitions_after`,
+`lapses_after`).
+
+Read via `getWordReviewHistory(simp)` → `ReviewLogEntry[]`
+(`src/core/flashcard-types.ts`), newest first. **Not wired into any UI yet**
+— this pass only added the schema + write path + read action, deliberately
+scoped that way. Building a per-word history view (e.g. "how many times has
+this word reached mastered, and when") is future work; the data already
+being captured is what makes that buildable later without a backfill.
+
+Deliberately **no precomputed mastery tier is stored** on each row — derive
+it on read with `FlashcardEngine.classifyMastery({ repetitions:
+repetitionsAfter, intervalDays: intervalDaysAfter })` so historical rows
+always reflect the *current* `MASTERED_INTERVAL_DAYS` threshold. If that
+threshold is ever retuned, old history reinterprets correctly instead of
+staying stamped with whatever tier definition was live when the row was
+written.
+
+`forgetWord` cascades to this table (`DELETE FROM flashcard_review_log WHERE
+card_id = ?`, alongside deleting the card itself) — "forget" means erasing
+all memory of the word, history included, not just resetting its SM-2 state.
+
+## Word actions (`AddToFlashcardsButton.tsx`)
+
+Despite the name, this is the single "Flashcard actions" menu for a word —
+one component, reused in three places: `WordTabContent`'s action row (word
+detail page, and by extension the study-session reveal above), and next to
+each result row in `search-dialog.tsx`. One entry point everywhere a word
+appears, rather than duplicated per-surface controls.
+
+- **Add to a manual deck** — unchanged from before; lists manual decks only.
+- **Đánh dấu khó (flag hard)** — `flagWordHard`/`unflagWordHard`, sets/clears
+  `flagged_hard_at`. Toggle, `closeOnClick={false}` so the menu stays open.
+- **Loại khỏi Flashcards / Khôi phục** — `excludeWord`/`restoreWord`, the
+  existing soft blacklist (`excluded_at`).
+- **Quên từ này... (forget)** — `forgetWord`, destructive, confirmed via
+  `AlertDialog` first. Deletes the `flashcard_cards` row (+ its
+  `flashcard_deck_cards` memberships) **and every `user_history` row with
+  that exact label** (word and search entries alike) — "as if you'd never
+  looked it up at all," not the soft-hide that exclude does. Irreversible;
+  viewing the word again afterward starts a brand-new card via
+  `upsertFlashcardOnView`, with no memory of the old SM-2 state.
+
+`getWordFlashcardStatus(simp)` returns the current `cardId`/`excluded`/
+`flaggedHard`/`deckIds` so the menu can render its toggles' current state;
+it's re-fetched after every action (`refresh()`), not optimistically assumed.
 
 ## `FlashcardEngine` — the domain layer
 
@@ -177,10 +355,21 @@ the HSK mastery bars, and each deck's fluency color:
 
 **Deck fluency**: `FlashcardEngine.fluencyOf(cards)` — a weighted score
 (new=0, learning=0.5, mastered=1, averaged) bucketed back into the same 3
-tiers, driving each deck row's bg tint + colored dot in `/flashcards`.
-Suppressed (`tier: null`) below `MIN_CARDS_FOR_FLUENCY_COLOR` (3) active
-cards — a 1-card deck that happens to be mastered would read as 100% green,
-which is noise, not signal.
+tiers, driving each deck row's bg tint + colored dot + "Thành thạo X%" text
+in `/flashcards`. Suppressed (`tier: null`) below
+`MIN_CARDS_FOR_FLUENCY_COLOR` (3) active cards — a 1-card deck that happens
+to be mastered would read as 100% green, which is noise, not signal.
+
+**`DeckListItem` per-deck fields** (`DeckList.tsx`'s `DeckRow`): `total`
+(every active card in the deck, regardless of due status — only `total === 0`
+disables the "Học" button, see the ahead-of-schedule note above), `count`
+(due today), `nextDueAt` (earliest `due_at` among cards not yet due; only
+rendered when `count === 0` — if something's already due, the count itself
+already answers "when," so this is purely the "nothing to do right now, come
+back in N days" case), `fluency` (above), `lastScore` + `lastSessionAt`
+(score and `finished_at` of the deck's most recently completed session, both
+null if never studied) — together these are what a user needs to decide
+whether to restudy a deck without opening it.
 
 ## Dashboard (`/flashcards`, `FlashcardDashboard.tsx`)
 
@@ -243,8 +432,14 @@ app/flashcards/
   deck/[deckId]/DeckDetail.tsx — manual deck rename/delete/word-management
   excluded/ExcludedList.tsx   — blacklist view + restore
 
-components/word/AddToFlashcardsButton.tsx — manual-deck picker + exclude/restore, on WordTabContent
+components/word/AddToFlashcardsButton.tsx — the word-actions menu (deck picker,
+  flag hard, exclude/restore, forget) — used by WordTabContent (→ word detail
+  page + study-session reveal) AND search-dialog.tsx's result rows
 components/layout/AppLayoutWithHistory.tsx — AppLayout wired to useHistory(), used by all /flashcards pages
+components/theme-provider.tsx, theme-toggle.tsx — light/dark toggle (footer);
+  next-themes was already a dependency but had no ThemeProvider wired up
+  before this, so dark mode was unreachable regardless of OS preference
+components/home/FlashcardTeaser.tsx — due-count/streak summary on the homepage welcome screen
 ```
 
 ## Known tunable knobs (not derived from external standards)

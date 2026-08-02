@@ -8,12 +8,14 @@ import {
   type DeckListItem,
   type FlashcardCard,
   type FlashcardDeck,
+  type ReviewLogEntry,
   type SessionQueueCard,
   type SessionSubmitPayload,
 } from "@/core/flashcard-types";
 import {
   FlashcardEngine,
   type DeckCardLink,
+  type DeckMetrics,
   type SessionLogRow,
   type SystemMetrics,
 } from "@/core/flashcard-engine";
@@ -47,6 +49,7 @@ function toCard(row: Record<string, unknown>): FlashcardCard {
     lastReviewedAt: (row.last_reviewed_at as string | null) ?? null,
     createdAt: row.created_at as string,
     excludedAt: (row.excluded_at as string | null) ?? null,
+    flaggedHardAt: (row.flagged_hard_at as string | null) ?? null,
   };
 }
 
@@ -82,7 +85,7 @@ async function loadEngine(): Promise<FlashcardEngine | null> {
       args: [GUEST_USER_ID],
     }),
     db!.execute({
-      sql: `SELECT deck_id, deck_label, finished_at, total_words, passed_first_try
+      sql: `SELECT deck_id, deck_label, finished_at, total_words, passed_first_try, ahead_of_schedule
             FROM flashcard_sessions WHERE user_id = ? ORDER BY finished_at DESC LIMIT ?`,
       args: [GUEST_USER_ID, SESSION_LOG_LIMIT],
     }),
@@ -102,6 +105,7 @@ async function loadEngine(): Promise<FlashcardEngine | null> {
       finishedAt: row.finished_at as string,
       totalWords: row.total_words as number,
       passedFirstTry: row.passed_first_try as number,
+      aheadOfSchedule: (row.ahead_of_schedule as number) === 1,
     };
   });
 
@@ -140,18 +144,20 @@ export async function upsertFlashcardOnView(simp: string): Promise<void> {
 export interface WordFlashcardStatus {
   cardId: string | null;
   excluded: boolean;
+  flaggedHard: boolean;
   deckIds: string[];
 }
 
 export async function getWordFlashcardStatus(simp: string): Promise<WordFlashcardStatus> {
-  if (!(await ready())) return { cardId: null, excluded: false, deckIds: [] };
+  const empty: WordFlashcardStatus = { cardId: null, excluded: false, flaggedHard: false, deckIds: [] };
+  if (!(await ready())) return empty;
   const trimmed = simp.trim();
   const cardRes = await db!.execute({
-    sql: "SELECT id, excluded_at FROM flashcard_cards WHERE user_id = ? AND simp = ?",
+    sql: "SELECT id, excluded_at, flagged_hard_at FROM flashcard_cards WHERE user_id = ? AND simp = ?",
     args: [GUEST_USER_ID, trimmed],
   });
   const row = cardRes.rows[0] as Record<string, unknown> | undefined;
-  if (!row) return { cardId: null, excluded: false, deckIds: [] };
+  if (!row) return empty;
 
   const cardId = row.id as string;
   const deckRes = await db!.execute({
@@ -161,6 +167,7 @@ export async function getWordFlashcardStatus(simp: string): Promise<WordFlashcar
   return {
     cardId,
     excluded: row.excluded_at != null,
+    flaggedHard: row.flagged_hard_at != null,
     deckIds: deckRes.rows.map((r) => (r as Record<string, unknown>).deck_id as string),
   };
 }
@@ -291,6 +298,53 @@ export async function restoreWord(simp: string): Promise<void> {
   });
 }
 
+/** Manual "mark as hard" — merged into the leech bucket alongside
+ * auto-detected leeches (see FlashcardEngine.isLeech). Does not touch
+ * `lapses`, so it never corrupts the real failure count. */
+export async function flagWordHard(simp: string): Promise<void> {
+  if (!(await ready())) return;
+  await db!.execute({
+    sql: "UPDATE flashcard_cards SET flagged_hard_at = ? WHERE user_id = ? AND simp = ?",
+    args: [new Date().toISOString(), GUEST_USER_ID, simp.trim()],
+  });
+}
+
+export async function unflagWordHard(simp: string): Promise<void> {
+  if (!(await ready())) return;
+  await db!.execute({
+    sql: "UPDATE flashcard_cards SET flagged_hard_at = NULL WHERE user_id = ? AND simp = ?",
+    args: [GUEST_USER_ID, simp.trim()],
+  });
+}
+
+/** Permanently forgets a word: deletes its flashcard_cards row (all SM-2
+ * state, deck memberships, review history) AND every user_history row for
+ * that exact label (word and search entries alike) — "as if you'd never
+ * looked it up at all", not just excluded_at soft-hiding. Irreversible; the
+ * caller is responsible for confirming with the user first. If viewed again
+ * later, it re-enters as a brand-new card via upsertFlashcardOnView. */
+export async function forgetWord(simp: string): Promise<void> {
+  if (!(await ready())) return;
+  const trimmed = simp.trim();
+  if (!trimmed) return;
+
+  const cardRes = await db!.execute({
+    sql: "SELECT id FROM flashcard_cards WHERE user_id = ? AND simp = ?",
+    args: [GUEST_USER_ID, trimmed],
+  });
+  const cardId = (cardRes.rows[0] as Record<string, unknown> | undefined)?.id as string | undefined;
+
+  const statements: { sql: string; args: string[] }[] = [];
+  if (cardId) {
+    statements.push({ sql: "DELETE FROM flashcard_review_log WHERE card_id = ?", args: [cardId] });
+    statements.push({ sql: "DELETE FROM flashcard_deck_cards WHERE card_id = ?", args: [cardId] });
+    statements.push({ sql: "DELETE FROM flashcard_cards WHERE id = ?", args: [cardId] });
+  }
+  statements.push({ sql: "DELETE FROM user_history WHERE label = ?", args: [trimmed] });
+
+  await db!.batch(statements, "write");
+}
+
 // ── Deck list (due counts + last scores + fluency) ───────────────────────────
 
 export async function getDecks(): Promise<DeckListItem[]> {
@@ -305,6 +359,14 @@ export async function getDeckWords(deckId: string): Promise<FlashcardCard[]> {
   return engine ? engine.getDeckWords(deckId) : [];
 }
 
+/** Per-deck breakdown (total, due, next-due date, mastery, leech count,
+ * fluency) — shown on the study-session start screen so a user can see the
+ * deck's state before committing to a session. */
+export async function getDeckMetrics(deckId: string): Promise<DeckMetrics | null> {
+  const engine = await loadEngine();
+  return engine ? engine.getDeckMetrics(deckId) : null;
+}
+
 // ── Dashboard metrics ─────────────────────────────────────────────────────────
 
 export async function getSystemMetrics(): Promise<SystemMetrics | null> {
@@ -314,62 +376,177 @@ export async function getSystemMetrics(): Promise<SystemMetrics | null> {
 
 // ── Study session ─────────────────────────────────────────────────────────────
 
-export async function startSession(deckId: string, limit?: number): Promise<SessionQueueCard[]> {
+export interface StartSessionResult {
+  queue: SessionQueueCard[];
+  /** True when nothing in the deck was due today, so the queue falls back to
+   * every active card in the deck instead — studying ahead of schedule
+   * rather than blocking the deck until something comes due. Cards graded
+   * this way still update their SM-2 state normally on submit. */
+  aheadOfSchedule: boolean;
+}
+
+export async function startSession(deckId: string, limit?: number): Promise<StartSessionResult> {
   const engine = await loadEngine();
-  if (!engine) return [];
+  if (!engine) return { queue: [], aheadOfSchedule: false };
   const words = engine.getDeckWords(deckId);
   const now = new Date().toISOString();
   const due = words.filter((c) => c.dueAt <= now);
-  const shuffled = shuffle(due);
+  const aheadOfSchedule = due.length === 0 && words.length > 0;
+  const pool = aheadOfSchedule ? words : due;
+  const shuffled = shuffle(pool);
   const limited = limit && limit > 0 ? shuffled.slice(0, limit) : shuffled;
-  return limited.map((c) => ({ ...c, isNew: c.repetitions === 0 }));
+  return {
+    queue: limited.map((c) => ({ ...c, isNew: c.repetitions === 0 })),
+    aheadOfSchedule,
+  };
 }
 
-/** The one atomic write for a completed session: upserts every touched card's
- * graded SM-2 state (computed client-side via core/srs.ts) plus one session
- * row, in a single db.batch() call. Nothing is written if the app closes
- * mid-session — this is only ever called on session completion. */
+/** The one atomic write for a completed session, in a single db.batch() call.
+ * Nothing is written if the app closes mid-session — this is only ever
+ * called on session completion.
+ *
+ * Branches on `aheadOfSchedule` (see StartSessionResult): a **real** session
+ * (something was actually due) persists every touched card's graded SM-2
+ * state and logs a `counted=1` review-log row per card. A **practice**
+ * session (studied ahead of schedule — nothing was due) never writes to
+ * flashcard_cards at all; it only logs `counted=0` review-log rows carrying
+ * each card's unchanged current state, so a review timeline isn't missing
+ * days that were actually studied, without pretending they advanced anything.
+ * Either way, exactly one flashcard_sessions row is written, tagged with the
+ * same flag, so streak/last-score history can be labeled honestly. */
 export async function submitSession(payload: SessionSubmitPayload): Promise<void> {
   if (!(await ready())) return;
-  const { deckId, deckLabel, startedAt, finishedAt, results, totalAttempts } = payload;
+  const { deckId, deckLabel, startedAt, finishedAt, results, totalAttempts, aheadOfSchedule } = payload;
   if (results.length === 0) return;
 
   const isManual = !isAutoDeckId(deckId) && deckId !== EXCLUDED_DECK_ID;
   const passedFirstTry = results.filter((r) => r.firstQuality === 5).length;
   const failedFirstTry = results.length - passedFirstTry;
+  const sessionId = crypto.randomUUID();
 
-  const statements = results.map((r) => ({
-    sql: `UPDATE flashcard_cards
-          SET ease_factor = ?, interval_days = ?, repetitions = ?, lapses = ?, due_at = ?, last_reviewed_at = ?
-          WHERE id = ? AND user_id = ?`,
-    args: [
-      r.card.easeFactor,
-      r.card.intervalDays,
-      r.card.repetitions,
-      r.card.lapses,
-      r.card.dueAt,
-      r.card.lastReviewedAt,
-      r.card.id,
-      GUEST_USER_ID,
-    ],
-  }));
+  // Session row goes first — review-log rows below reference it by id.
+  const statements: { sql: string; args: (string | number | null)[] }[] = [
+    {
+      sql: `INSERT INTO flashcard_sessions (id, user_id, deck_id, deck_label, started_at, finished_at, total_words, passed_first_try, failed_first_try, total_attempts, ahead_of_schedule)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        sessionId,
+        GUEST_USER_ID,
+        isManual ? deckId : null,
+        deckLabel,
+        startedAt,
+        finishedAt,
+        results.length,
+        passedFirstTry,
+        failedFirstTry,
+        totalAttempts,
+        aheadOfSchedule ? 1 : 0,
+      ],
+    },
+  ];
 
-  statements.push({
-    sql: `INSERT INTO flashcard_sessions (id, user_id, deck_id, deck_label, started_at, finished_at, total_words, passed_first_try, failed_first_try, total_attempts)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    args: [
-      crypto.randomUUID(),
-      GUEST_USER_ID,
-      isManual ? deckId : null,
-      deckLabel,
-      startedAt,
-      finishedAt,
-      results.length,
-      passedFirstTry,
-      failedFirstTry,
-      totalAttempts,
-    ],
-  });
+  if (aheadOfSchedule) {
+    // Practice session: never touch flashcard_cards. Log each card's
+    // CURRENT (unchanged) state — fetched fresh, not the client's
+    // gradeCard() output, since that computation is never actually applied.
+    const ids = results.map((r) => r.card.id);
+    const currentRes = await db!.execute({
+      sql: `SELECT id, ease_factor, interval_days, repetitions, lapses FROM flashcard_cards WHERE id IN (${ids.map(() => "?").join(",")})`,
+      args: ids,
+    });
+    const currentById = new Map(
+      currentRes.rows.map((r) => [(r as Record<string, unknown>).id as string, r as Record<string, unknown>])
+    );
+    for (const r of results) {
+      const row = currentById.get(r.card.id);
+      if (!row) continue; // word was forgotten mid-session — nothing to log against
+      statements.push({
+        sql: `INSERT INTO flashcard_review_log (id, user_id, card_id, session_id, simp, quality, counted, ease_factor_after, interval_days_after, repetitions_after, lapses_after, reviewed_at)
+              VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`,
+        args: [
+          crypto.randomUUID(),
+          GUEST_USER_ID,
+          r.card.id,
+          sessionId,
+          r.card.simp,
+          r.firstQuality,
+          row.ease_factor as number,
+          row.interval_days as number,
+          row.repetitions as number,
+          row.lapses as number,
+          finishedAt,
+        ],
+      });
+    }
+  } else {
+    for (const r of results) {
+      statements.push({
+        sql: `UPDATE flashcard_cards
+              SET ease_factor = ?, interval_days = ?, repetitions = ?, lapses = ?, due_at = ?, last_reviewed_at = ?
+              WHERE id = ? AND user_id = ?`,
+        args: [
+          r.card.easeFactor,
+          r.card.intervalDays,
+          r.card.repetitions,
+          r.card.lapses,
+          r.card.dueAt,
+          r.card.lastReviewedAt,
+          r.card.id,
+          GUEST_USER_ID,
+        ],
+      });
+      statements.push({
+        sql: `INSERT INTO flashcard_review_log (id, user_id, card_id, session_id, simp, quality, counted, ease_factor_after, interval_days_after, repetitions_after, lapses_after, reviewed_at)
+              VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
+        args: [
+          crypto.randomUUID(),
+          GUEST_USER_ID,
+          r.card.id,
+          sessionId,
+          r.card.simp,
+          r.firstQuality,
+          r.card.easeFactor,
+          r.card.intervalDays,
+          r.card.repetitions,
+          r.card.lapses,
+          r.card.lastReviewedAt ?? finishedAt,
+        ],
+      });
+    }
+  }
 
   await db!.batch(statements, "write");
+}
+
+// ── Review history (schema + write path only — no UI consumer yet) ──────────
+
+/** Full graded-review timeline for a word, most recent first. Not wired into
+ * any screen yet — see ReviewLogEntry for why tier isn't stored per row. */
+export async function getWordReviewHistory(simp: string): Promise<ReviewLogEntry[]> {
+  if (!(await ready())) return [];
+  const trimmed = simp.trim();
+  const cardRes = await db!.execute({
+    sql: "SELECT id FROM flashcard_cards WHERE user_id = ? AND simp = ?",
+    args: [GUEST_USER_ID, trimmed],
+  });
+  const cardId = (cardRes.rows[0] as Record<string, unknown> | undefined)?.id as string | undefined;
+  if (!cardId) return [];
+
+  const result = await db!.execute({
+    sql: `SELECT quality, counted, ease_factor_after, interval_days_after, repetitions_after, lapses_after, reviewed_at
+          FROM flashcard_review_log WHERE card_id = ? ORDER BY reviewed_at DESC`,
+    args: [cardId],
+  });
+  return result.rows.map((r) => {
+    const row = r as Record<string, unknown>;
+    return {
+      quality: row.quality as 2 | 5,
+      counted: (row.counted as number) === 1,
+      easeFactorAfter: row.ease_factor_after as number,
+      intervalDaysAfter: row.interval_days_after as number,
+      repetitionsAfter: row.repetitions_after as number,
+      lapsesAfter: row.lapses_after as number,
+      reviewedAt: row.reviewed_at as string,
+    };
+  });
 }

@@ -12,6 +12,10 @@ export interface FlashcardCard extends SrsState {
   simp: string;
   createdAt: string;
   excludedAt: string | null;
+  /** Manual "mark as hard" flag — NULL = not flagged, timestamp = user
+   * flagged it. Merged into the leech bucket (FlashcardEngine.isLeech)
+   * alongside the auto-detected `lapses >= LEECH_LAPSE_THRESHOLD` case. */
+  flaggedHardAt: string | null;
 }
 
 export interface FlashcardDeck {
@@ -30,6 +34,13 @@ export const EXCLUDED_DECK_ID = "excluded";
 
 export function isAutoDeckId(id: string): boolean {
   return id === "all" || id === "leech" || id.startsWith("hsk:") || id.startsWith("month:");
+}
+
+/** Whole days from now until an ISO due_at, rounded up (min 1). Shared by
+ * the deck list row and the study-session start screen so "next due"
+ * phrasing stays consistent everywhere it's shown. */
+export function daysUntil(dueAt: string): number {
+  return Math.max(1, Math.ceil((new Date(dueAt).getTime() - Date.now()) / 86400000));
 }
 
 /** Anki's "mature card" convention: an SM-2 interval at or past this many
@@ -71,8 +82,22 @@ export interface DeckListItem {
   title: string;
   /** Due count for studyable decks; excluded-word count for the Excluded pseudo-deck. */
   count: number;
+  /** Total active cards in the deck regardless of due status — a deck with
+   * total > 0 but count === 0 can still be studied (ahead of schedule), see
+   * startSession(). Only total === 0 means truly nothing to study. */
+  total: number;
+  /** Earliest due_at among cards not yet due, ISO string, or null if the
+   * deck has no active cards. Only meaningful/shown when count === 0 — if
+   * count > 0 something is already due, so "next due" is effectively now. */
+  nextDueAt: string | null;
   /** passed_first_try / total_words of the most recent session for this deck, null if none. */
   lastScore: number | null;
+  /** finished_at of that same most-recent session, null if none. */
+  lastSessionAt: string | null;
+  /** True if that most-recent session was ahead-of-schedule (practice —
+   * didn't advance any card's SM-2 state), so the UI can label it honestly
+   * instead of implying the score changed the deck's real schedule. */
+  lastSessionAheadOfSchedule: boolean;
   /** Drives the deck row's bg/text tint in the deck list — see DeckFluency. */
   fluency: DeckFluency;
 }
@@ -88,6 +113,24 @@ export interface SessionResult {
   firstQuality: 2 | 5;
 }
 
+/** One row from flashcard_review_log — a single real-world graded review of
+ * one word. `counted=false` means it was a practice/ahead-of-schedule review
+ * (the *_after fields are just the card's state at that moment, unchanged
+ * by this review). No precomputed mastery tier is stored — derive it with
+ * `FlashcardEngine.classifyMastery({ repetitions: repetitionsAfter, intervalDays: intervalDaysAfter })`
+ * so it always reflects the *current* MASTERED_INTERVAL_DAYS threshold, not
+ * whatever it was when the row was written. Not consumed by any UI yet —
+ * see getWordReviewHistory() in actions/flashcards.ts. */
+export interface ReviewLogEntry {
+  quality: 2 | 5;
+  counted: boolean;
+  easeFactorAfter: number;
+  intervalDaysAfter: number;
+  repetitionsAfter: number;
+  lapsesAfter: number;
+  reviewedAt: string;
+}
+
 export interface SessionSubmitPayload {
   /** Manual deck uuid or AutoDeckId — identifies where the session was run. */
   deckId: string;
@@ -98,4 +141,10 @@ export interface SessionSubmitPayload {
   results: SessionResult[];
   /** Includes recycled retries after a fail. */
   totalAttempts: number;
+  /** From StartSessionResult — true when this session studied cards that
+   * weren't actually due yet (nothing in the deck was due, so the deck
+   * became fully studyable as practice). Practice sessions are logged (for
+   * streak/last-score/history) but never write to flashcard_cards — see
+   * submitSession() and .claude/docs/flashcards.md. */
+  aheadOfSchedule: boolean;
 }
