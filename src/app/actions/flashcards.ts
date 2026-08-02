@@ -6,6 +6,7 @@ import {
   EXCLUDED_DECK_ID,
   isAutoDeckId,
   type DeckListItem,
+  type DeckSessionEntry,
   type FlashcardCard,
   type FlashcardDeck,
   type ReviewLogEntry,
@@ -85,7 +86,7 @@ async function loadEngine(): Promise<FlashcardEngine | null> {
       args: [GUEST_USER_ID],
     }),
     db!.execute({
-      sql: `SELECT deck_id, deck_label, finished_at, total_words, passed_first_try, ahead_of_schedule
+      sql: `SELECT id, deck_id, deck_label, started_at, finished_at, total_words, passed_first_try, failed_first_try, total_attempts, ahead_of_schedule
             FROM flashcard_sessions WHERE user_id = ? ORDER BY finished_at DESC LIMIT ?`,
       args: [GUEST_USER_ID, SESSION_LOG_LIMIT],
     }),
@@ -100,11 +101,15 @@ async function loadEngine(): Promise<FlashcardEngine | null> {
   const sessions: SessionLogRow[] = sessionsRes.rows.map((r) => {
     const row = r as Record<string, unknown>;
     return {
+      id: row.id as string,
       deckId: (row.deck_id as string | null) ?? null,
       deckLabel: row.deck_label as string,
+      startedAt: row.started_at as string,
       finishedAt: row.finished_at as string,
       totalWords: row.total_words as number,
       passedFirstTry: row.passed_first_try as number,
+      failedFirstTry: row.failed_first_try as number,
+      totalAttempts: row.total_attempts as number,
       aheadOfSchedule: (row.ahead_of_schedule as number) === 1,
     };
   });
@@ -365,6 +370,42 @@ export async function getDeckWords(deckId: string): Promise<FlashcardCard[]> {
 export async function getDeckMetrics(deckId: string): Promise<DeckMetrics | null> {
   const engine = await loadEngine();
   return engine ? engine.getDeckMetrics(deckId) : null;
+}
+
+/** Full session history for one deck, newest first — lets a user see (and
+ * delete, via deleteSession) individual past sessions, e.g. a stray 1-word
+ * test session that's skewing "last score" on the deck list. */
+export async function getDeckSessions(deckId: string): Promise<DeckSessionEntry[]> {
+  const engine = await loadEngine();
+  return engine ? engine.getDeckSessions(deckId) : [];
+}
+
+/** Deletes one flashcard_sessions row. Does NOT revert the SM-2 state
+ * (due_at/ease/repetitions/lapses) that the session's grading already wrote
+ * to flashcard_cards — a session can share cards with other sessions before/
+ * after it, so "undoing" it safely would require a full per-review undo
+ * log, not just deleting the summary row. This only removes the session
+ * from history/stats: the deck's "last score", the all-time retention rate,
+ * and the activity heatmap/streak (SystemMetrics.sessions and
+ * DeckListItem.lastScore both read the same table) — surfaced explicitly in
+ * the caller's confirmation dialog.
+ *
+ * flashcard_review_log rows are orphaned (session_id -> NULL), never
+ * deleted, per that table's declared `ON DELETE SET NULL` intent — it's the
+ * one append-only, permanent history table in this feature (see
+ * .claude/docs/flashcards.md, "Review log"); a session bookkeeping cleanup
+ * must not erase the underlying per-word graded-review record. Contrast
+ * forgetWord(), which *does* delete review_log rows — there the intent is
+ * "erase all memory of this word," a fundamentally different operation. */
+export async function deleteSession(sessionId: string): Promise<void> {
+  if (!(await ready())) return;
+  await db!.batch(
+    [
+      { sql: "UPDATE flashcard_review_log SET session_id = NULL WHERE session_id = ?", args: [sessionId] },
+      { sql: "DELETE FROM flashcard_sessions WHERE id = ? AND user_id = ?", args: [sessionId, GUEST_USER_ID] },
+    ],
+    "write"
+  );
 }
 
 // ── Dashboard metrics ─────────────────────────────────────────────────────────

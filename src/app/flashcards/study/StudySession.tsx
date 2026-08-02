@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { WordTabContent } from "@/components/word/WordTabContent";
+import { DeckSessionsTable } from "./DeckSessionsTable";
 import { getWordEntries } from "@/app/actions";
 import { getDecks, getDeckMetrics, startSession, submitSession } from "@/app/actions/flashcards";
 import { gradeCard, type SrsQuality } from "@/core/srs";
@@ -58,6 +59,7 @@ export function StudySession({ deckId }: StudySessionProps) {
   const [queue, setQueue] = useState<SessionQueueCard[]>([]);
   const [totalWords, setTotalWords] = useState(0);
   const [totalAttempts, setTotalAttempts] = useState(0);
+  const [skippedCount, setSkippedCount] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [currentEntry, setCurrentEntry] = useState<WordEntry | null>(null);
   const [loadingEntry, setLoadingEntry] = useState(false);
@@ -99,6 +101,7 @@ export function StudySession({ deckId }: StudySessionProps) {
     setQueue(initial);
     setTotalWords(initial.length);
     setTotalAttempts(0);
+    setSkippedCount(0);
     setRevealed(false);
     setCurrentEntry(null);
     setPhase("running");
@@ -167,6 +170,18 @@ export function StudySession({ deckId }: StudySessionProps) {
       setRevealed(true);
       void loadCurrentEntry(current.simp);
     }
+  }
+
+  // "Bỏ qua" — neither pass nor fail: no gradeCard() call, no gradedRef
+  // entry, no totalAttempts increment, so submitSession never touches this
+  // card's SM-2 state (due_at/ease/repetitions all stay exactly as they
+  // were). Just removed from THIS session's queue with no reinsertion, so
+  // it won't reappear today — it's still due (or becomes due) and will show
+  // up again the next time this deck is studied.
+  function handleSkip() {
+    if (!current) return;
+    setQueue((prev) => prev.slice(1));
+    setSkippedCount((n) => n + 1);
   }
 
   function handleContinue() {
@@ -320,6 +335,8 @@ export function StudySession({ deckId }: StudySessionProps) {
                 <Button onClick={handleStart}>Bắt đầu</Button>
               </Card>
             )}
+
+            <DeckSessionsTable deckId={deckId} />
           </>
         )}
 
@@ -340,12 +357,17 @@ export function StudySession({ deckId }: StudySessionProps) {
             </Card>
 
             {!revealed ? (
-              <div className="grid grid-cols-2 gap-3">
-                <Button variant="outline" size="lg" onClick={() => handleAnswer(2)}>
-                  Chưa nhớ?
-                </Button>
-                <Button size="lg" onClick={() => handleAnswer(5)}>
-                  Đã nhớ
+              <div className="flex flex-col gap-2">
+                <div className="grid grid-cols-2 gap-3">
+                  <Button variant="outline" size="lg" onClick={() => handleAnswer(2)}>
+                    Chưa nhớ?
+                  </Button>
+                  <Button size="lg" onClick={() => handleAnswer(5)}>
+                    Đã nhớ
+                  </Button>
+                </div>
+                <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={handleSkip}>
+                  Bỏ qua, học lại lần sau
                 </Button>
               </div>
             ) : (
@@ -374,6 +396,7 @@ export function StudySession({ deckId }: StudySessionProps) {
             <p className="text-sm text-muted-foreground">
               {[...gradedRef.current.values()].filter((r) => r.firstQuality === 5).length} / {gradedRef.current.size} từ nhớ ngay lần đầu ·{" "}
               {totalAttempts} lượt trả lời
+              {skippedCount > 0 && ` · ${skippedCount} từ bỏ qua (chưa tính điểm)`}
               {aheadOfSchedule && " (không thay đổi lịch ôn tập của các từ)"}
             </p>
             <Button nativeButton={false} render={<Link href="/flashcards" />}>Quay lại danh sách</Button>

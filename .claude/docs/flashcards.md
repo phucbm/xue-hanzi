@@ -311,6 +311,49 @@ written.
 card_id = ?`, alongside deleting the card itself) — "forget" means erasing
 all memory of the word, history included, not just resetting its SM-2 state.
 
+## Session history (`DeckSessionsTable.tsx`)
+
+`getDeckSessions(deckId)` → `FlashcardEngine.getDeckSessions()` returns every
+`flashcard_sessions` row for one deck, newest first (filtered from
+`this.sessions` the same way `lastSessionMaps()` matches them: manual decks
+by `deck_id`, auto decks by `deck_label` with `deck_id IS NULL` — no extra
+query). Rendered as a small table at the bottom of the study-session start
+screen (`StudySession.tsx` — the "deck details" screen elsewhere in this
+doc), each row with a delete button.
+
+**Why this exists**: a stray session — a quick 1-word test click, an
+accidental deck open — silently becomes "the deck's last score" forever
+until a real session overwrites it (`lastSessionMaps()` always takes the
+most recent row). Before `lastSessionTotalWords`/`lastSessionPassed` were
+added to the deck list caption, this was doubly confusing: a deck with
+hundreds of words could show a bare "100%" from a session that only ever
+graded one card. The sessions table lets a user find and remove that exact
+row.
+
+**`deleteSession(sessionId)`** deletes the `flashcard_sessions` row and sets
+`flashcard_review_log.session_id = NULL` for any rows that referenced it —
+**not** a `DELETE`, per that column's declared `ON DELETE SET NULL` intent
+(see schema above): `flashcard_review_log` is the one append-only,
+permanent-history table in this feature, so a session-bookkeeping cleanup
+must not erase the underlying per-word graded-review record. Contrast
+`forgetWord()`, which *does* delete `flashcard_review_log` rows — there the
+intent is "erase all memory of this word," a fundamentally different
+operation from "this session summary was noise."
+
+**What it does NOT do**: revert the SM-2 state (`due_at`/`ease_factor`/
+`repetitions`/`lapses`) that the session's grading already wrote to
+`flashcard_cards`. A card can be touched by sessions before and after the
+one being deleted, so safely "undoing" a specific session's effect would
+need a full per-review undo log, not just deleting the summary row — out of
+scope here. The confirmation dialog states this plainly. Deleting a session
+does, however, remove it from every place that reads `flashcard_sessions`
+directly: the deck's "last score" (`lastSessionMaps()`), the all-time
+retention rate (`SystemMetrics.retentionAllTime`), and the client-side
+streak/heatmap (`SystemMetrics.sessions`) — all three recompute from
+whatever sessions remain, so deleting a stray session can change the streak
+or heatmap for that day too, not just the one deck's score. Surfaced in the
+confirmation dialog rather than left as a silent side effect.
+
 ## Word actions (`AddToFlashcardsButton.tsx`)
 
 Despite the name, this is the single "Flashcard actions" menu for a word —
@@ -402,7 +445,16 @@ already answers "when," so this is purely the "nothing to do right now, come
 back in N days" case), `newLast24h` (count of cards created in a rolling 24h
 window — see the newly-added badge/list note under Study session flow),
 `fluency` (above), `lastScore` + `lastSessionAt` (score and `finished_at` of
-the deck's most recently completed session, both null if never studied) —
+the deck's most recently completed session, both null if never studied),
+`lastSessionTotalWords` + `lastSessionPassed` (the raw counts behind that
+score — `DeckList.tsx` renders "1/1 từ đúng (100%)" rather than a bare
+"100%", specifically so a 1-word session doesn't read as "the whole deck,"
+which is exactly what happened before this was added: a deck with hundreds
+of words showed a lone 100% from a 1-word test click with no way to tell
+the sample size was 1), `sessionCount` (`getDeckSessions(id).length` — total
+sessions ever recorded for this deck, shown next to the last-score line so
+"100%" also reads as "based on 1 session ever," not just "based on 1 word")
+—
 together these are what a user needs to decide whether to restudy a deck
 without opening it.
 

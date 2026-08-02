@@ -70,7 +70,8 @@ function DeckRow({ deck, manage }: { deck: DeckListItem; manage?: boolean }) {
           </p>
           {score && deck.lastSessionAt && (
             <p className="text-xs text-muted-foreground">
-              Lần trước: {score} ({timeAgo(new Date(deck.lastSessionAt).getTime())})
+              Lần trước: {deck.lastSessionPassed}/{deck.lastSessionTotalWords} từ đúng ({score}) ·{" "}
+              {timeAgo(new Date(deck.lastSessionAt).getTime())} · {deck.sessionCount} phiên học
               {deck.lastSessionAheadOfSchedule && " · luyện tập"}
             </p>
           )}

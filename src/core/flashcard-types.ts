@@ -99,6 +99,17 @@ export interface DeckListItem {
   lastScore: number | null;
   /** finished_at of that same most-recent session, null if none. */
   lastSessionAt: string | null;
+  /** total_words of that same most-recent session, null if none — shown
+   * alongside lastScore (e.g. "1/1 từ") so a tiny-sample session (1 word)
+   * doesn't read as "100% of the whole deck" when the deck has hundreds. */
+  lastSessionTotalWords: number | null;
+  /** passed_first_try of that same most-recent session, null if none. */
+  lastSessionPassed: number | null;
+  /** Total completed sessions ever recorded for this deck (see
+   * FlashcardEngine.getDeckSessions) — shown on the deck list so "1/1 từ
+   * đúng (100%)" also reads as "based on just 1 session ever," not only
+   * "based on 1 word." */
+  sessionCount: number;
   /** True if that most-recent session was ahead-of-schedule (practice —
    * didn't advance any card's SM-2 state), so the UI can label it honestly
    * instead of implying the score changed the deck's real schedule. */
@@ -134,6 +145,23 @@ export interface ReviewLogEntry {
   repetitionsAfter: number;
   lapsesAfter: number;
   reviewedAt: string;
+}
+
+/** One row from flashcard_sessions, shaped for a per-deck history table —
+ * contrast SessionLogRow (flashcard-engine.ts), which is the same underlying
+ * data but without `id`, used for the cross-deck lastScore lookup and the
+ * streak/heatmap feed. Deleting a session here (see deleteSession()) also
+ * removes it from that streak/heatmap feed, since both read the same table —
+ * surfaced explicitly in the delete confirmation, not a silent side effect. */
+export interface DeckSessionEntry {
+  id: string;
+  startedAt: string;
+  finishedAt: string;
+  totalWords: number;
+  passedFirstTry: number;
+  failedFirstTry: number;
+  totalAttempts: number;
+  aheadOfSchedule: boolean;
 }
 
 export interface SessionSubmitPayload {

@@ -14,10 +14,12 @@
 import { getEntries } from "chinese-lexicon";
 import {
   EXCLUDED_DECK_ID,
+  isAutoDeckId,
   LEECH_LAPSE_THRESHOLD,
   MASTERED_INTERVAL_DAYS,
   type DeckFluency,
   type DeckListItem,
+  type DeckSessionEntry,
   type FlashcardCard,
   type FlashcardDeck,
   type MasteryTier,
@@ -43,19 +45,29 @@ export interface DeckCardLink {
  * deck-list "last score" lookup and (via `sessions` in SystemMetrics) the
  * client-side streak/heatmap computation. */
 export interface SessionLogRow {
+  id: string;
   deckId: string | null;
   deckLabel: string;
+  startedAt: string;
   finishedAt: string;
   totalWords: number;
   passedFirstTry: number;
+  failedFirstTry: number;
+  totalAttempts: number;
   aheadOfSchedule: boolean;
 }
 
-/** Score + timestamp of a deck's most recently completed session. */
+/** Score + timestamp + raw counts of a deck's most recently completed
+ * session. totalWords/passedFirstTry ride along so the UI can show the
+ * actual sample size next to the score (e.g. "1/1 từ") — a bare "100%" from
+ * a 1-word session reads as "the whole deck" otherwise, especially on a
+ * deck with hundreds of words. */
 interface LastSessionInfo {
   score: number;
   finishedAt: string;
   aheadOfSchedule: boolean;
+  totalWords: number;
+  passedFirstTry: number;
 }
 
 export interface MasteryBreakdown {
@@ -198,7 +210,13 @@ export class FlashcardEngine {
     // first match per key is already the most recent one.
     for (const s of this.sessions) {
       const score = s.totalWords > 0 ? s.passedFirstTry / s.totalWords : 0;
-      const info: LastSessionInfo = { score, finishedAt: s.finishedAt, aheadOfSchedule: s.aheadOfSchedule };
+      const info: LastSessionInfo = {
+        score,
+        finishedAt: s.finishedAt,
+        aheadOfSchedule: s.aheadOfSchedule,
+        totalWords: s.totalWords,
+        passedFirstTry: s.passedFirstTry,
+      };
       if (s.deckId) {
         if (!byDeckId.has(s.deckId)) byDeckId.set(s.deckId, info);
       } else if (!byLabel.has(s.deckLabel)) {
@@ -251,7 +269,10 @@ export class FlashcardEngine {
         newLast24h: this.newCards(memberCards, now).length,
         lastScore: last?.score ?? null,
         lastSessionAt: last?.finishedAt ?? null,
+        lastSessionTotalWords: last?.totalWords ?? null,
+        lastSessionPassed: last?.passedFirstTry ?? null,
         lastSessionAheadOfSchedule: last?.aheadOfSchedule ?? false,
+        sessionCount: this.getDeckSessions(id).length,
         fluency: FlashcardEngine.fluencyOf(memberCards),
       });
     };
@@ -292,7 +313,10 @@ export class FlashcardEngine {
         newLast24h: this.newCards(memberCards, now).length,
         lastScore: last?.score ?? null,
         lastSessionAt: last?.finishedAt ?? null,
+        lastSessionTotalWords: last?.totalWords ?? null,
+        lastSessionPassed: last?.passedFirstTry ?? null,
         lastSessionAheadOfSchedule: last?.aheadOfSchedule ?? false,
+        sessionCount: this.getDeckSessions(deck.id).length,
         fluency: FlashcardEngine.fluencyOf(memberCards),
       });
     }
@@ -307,7 +331,10 @@ export class FlashcardEngine {
       newLast24h: 0,
       lastScore: null,
       lastSessionAt: null,
+      lastSessionTotalWords: null,
+      lastSessionPassed: null,
       lastSessionAheadOfSchedule: false,
+      sessionCount: 0,
       fluency: { ratio: null, tier: null },
     });
 
@@ -330,6 +357,28 @@ export class FlashcardEngine {
       this.deckCards.filter((l) => l.deckId === deckId).map((l) => l.cardId)
     );
     return this.active.filter((c) => memberIds.has(c.id));
+  }
+
+  /** Full session history for one deck, newest first — for the per-deck
+   * sessions table (with delete). Matches sessions the same way they were
+   * written (see submitSession): manual decks by deck_id, auto decks by
+   * deck_label with deck_id NULL. Sourced from `this.sessions` (already
+   * ordered finished_at DESC), same data lastSessionMaps() reads — no
+   * separate query. */
+  getDeckSessions(deckId: string): DeckSessionEntry[] {
+    const matches = isAutoDeckId(deckId)
+      ? (s: SessionLogRow) => s.deckId === null && s.deckLabel === deckId
+      : (s: SessionLogRow) => s.deckId === deckId;
+    return this.sessions.filter(matches).map((s) => ({
+      id: s.id,
+      startedAt: s.startedAt,
+      finishedAt: s.finishedAt,
+      totalWords: s.totalWords,
+      passedFirstTry: s.passedFirstTry,
+      failedFirstTry: s.failedFirstTry,
+      totalAttempts: s.totalAttempts,
+      aheadOfSchedule: s.aheadOfSchedule,
+    }));
   }
 
   getDeckMetrics(deckId: string): DeckMetrics {
