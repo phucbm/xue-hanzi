@@ -23,6 +23,12 @@ Output MUST be written entirely in Vietnamese. Follow the exact format for each 
 **Nguồn gốc:**
 Phân tích tất cả thành phần xuống đơn vị nhỏ nhất có nghĩa. Với mỗi thành phần phức tạp, tiếp tục tách nhỏ. Nếu một thành phần chỉ gợi âm mà không có nghĩa rõ ràng, ghi rõ "gợi âm". Không bịa đặt nghĩa — nếu không chắc, ghi "gợi âm" hoặc "không rõ". Kết thúc bằng một câu tóm tắt logic: [thành phần A] + [thành phần B] → nghĩa gốc.
 
+Dựa vào phân tích Nguồn gốc ở trên, xác định chữ thuộc loại nào trong lục thư (六書):
+Tượng hình (象形, vẽ hình sự vật) · Chỉ sự (指事, dùng ký hiệu chỉ khái niệm) · Hội ý (会意, ghép các phần để tạo nghĩa) · Hình thanh (形声, một phần gợi nghĩa + một phần gợi âm) · Chuyển chú (转注, chữ cùng nguồn gốc, nghĩa liên quan) · Giả tá (假借, mượn chữ để ghi nghĩa khác).
+Chỉ chọn đúng 1 loại phù hợp nhất, trình bày trên một dòng duy nhất:
+
+**Lục thư:** [Tên loại tiếng Việt] ([chữ Hán, vd. 形声]) — [lý do ngắn gọn dựa trên phân tích Nguồn gốc ở trên, 1 câu]
+
 **Từ liên quan:**
 [word1](?word=word1) pinyin1 (nghĩa) · [word2](?word=word2) pinyin2 (nghĩa) · [word3](?word=word3) pinyin3 (nghĩa) · [word4](?word=word4) pinyin4 (nghĩa) · [word5](?word=word5) pinyin5 (nghĩa)
 
@@ -48,7 +54,7 @@ Phân tích tất cả thành phần xuống đơn vị nhỏ nhất có nghĩa.
 **[Y](?word=Y)** pinyin · Hán Việt · nghĩa
 
 **Nguồn gốc:**
-Với mỗi chữ trong từ, phân tích thành phần xuống đơn vị nhỏ nhất. Nếu thành phần chỉ gợi âm, ghi rõ. Kết thúc mỗi chữ bằng một câu tóm tắt logic. Không bịa đặt nghĩa.
+Với mỗi chữ trong từ, phân tích thành phần xuống đơn vị nhỏ nhất. Nếu thành phần chỉ gợi âm, ghi rõ. Kết thúc mỗi chữ bằng một câu tóm tắt logic, rồi thêm loại lục thư (六書) trong ngoặc — chỉ nêu tên loại (Tượng hình / Chỉ sự / Hội ý / Hình thanh / Chuyển chú / Giả tá), không giải thích thêm. Không bịa đặt nghĩa.
 
 **Từ liên quan:**
 [word1](?word=word1) pinyin1 (nghĩa) · [word2](?word=word2) pinyin2 (nghĩa) · [word3](?word=word3) pinyin3 (nghĩa) · [word4](?word=word4) pinyin4 (nghĩa) · [word5](?word=word5) pinyin5 (nghĩa)
@@ -79,7 +85,7 @@ Với mỗi chữ trong từ, phân tích thành phần xuống đơn vị nhỏ
 **[W](?word=W)** pinyin · Hán Việt · nghĩa
 
 **Nguồn gốc:**
-Với mỗi chữ quan trọng trong thành ngữ, phân tích thành phần xuống đơn vị nhỏ nhất. Bỏ qua chữ quá đơn giản hoặc thuần gợi âm nếu không thêm giá trị. Không bịa đặt nghĩa.
+Với mỗi chữ quan trọng trong thành ngữ, phân tích thành phần xuống đơn vị nhỏ nhất. Bỏ qua chữ quá đơn giản hoặc thuần gợi âm nếu không thêm giá trị. Kết thúc mỗi chữ đã phân tích bằng loại lục thư (六書) trong ngoặc — chỉ nêu tên loại (Tượng hình / Chỉ sự / Hội ý / Hình thanh / Chuyển chú / Giả tá), không giải thích thêm. Không bịa đặt nghĩa.
 
 **Từ liên quan:**
 [word1](?word=word1) pinyin1 (nghĩa) · [word2](?word=word2) pinyin2 (nghĩa) · [word3](?word=word3) pinyin3 (nghĩa) · [word4](?word=word4) pinyin4 (nghĩa) · [word5](?word=word5) pinyin5 (nghĩa)
@@ -109,6 +115,7 @@ Với mỗi chữ quan trọng trong thành ngữ, phân tích thành phần xu�
 - Example sentences go from simple to complex.
 - Each example sentence must include pinyin below and Vietnamese translation.
 - Etymology must be factual. Only analyze components you can confirm with certainty. Split complex components into smallest units and state the role of each: nghĩa (semantic) / gợi âm (phonetic) / không rõ (uncertain). If unsure about any component, write "không rõ" — never guess or invent. Do not confuse visually similar components (e.g. 手 vs 攴, 己 vs 已).
+- Lục thư (六書, defined in CASE 1): for CASE 1, show as its own **Lục thư:** line with a short reason. For CASE 2/3, tag each character's summary sentence in Nguồn gốc with just the type name in parentheses — no separate line, no extra explanation.
 - Do not add extra sections, commentary, or explanations outside the format.
 - **Lưu ý sử dụng** (optional section — applies to all cases): After **Từ liên quan** and before **Ví dụ**, add this section only when the word has meaningful usage boundaries worth flagging (e.g. formal/academic register, near-synonyms with distinct nuance, common learner confusion). Skip entirely for simple, everyday words (e.g. 吃, 大, 你好). When included, use this structure:
   - *Văn phong & tần suất:* [formal/written/academic hay casual/spoken? thông dụng hay chuyên ngành?]
