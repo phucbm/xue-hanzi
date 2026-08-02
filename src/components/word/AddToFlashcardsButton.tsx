@@ -15,6 +15,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -134,9 +135,14 @@ export function AddToFlashcardsButton({ simp, onForgotten }: AddToFlashcardsButt
 
   async function handleForget() {
     setConfirmForgetOpen(false);
-    await forgetWord(simp);
-    onForgotten?.();
-    refresh();
+    try {
+      await forgetWord(simp);
+      toast.success(`Đã quên từ "${simp}".`);
+      onForgotten?.();
+      refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    }
   }
 
   return (

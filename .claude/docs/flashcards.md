@@ -211,7 +211,17 @@ un-hides it back into exactly the decks it was already in.
    below), so flagging/excluding/deleting a word is available right there
    during review, no need to leave the session. Related/etymology words
    inside the reveal open in a **new tab** — clicking one doesn't navigate
-   away from (and abandon) the in-memory session queue.
+   away from (and abandon) the in-memory session queue. **Forgetting mid-
+   review**: `AddToFlashcardsButton`'s `onForgotten` callback is wired to
+   `StudySession.tsx`'s `handleWordForgotten()`, which deletes the card from
+   `gradedRef` (so `submitSession` never references a card id that no longer
+   exists) and drops it from the queue with no reinsertion, advancing
+   immediately — there's nothing left to continue reviewing. `totalWords`
+   is decremented too, so the progress count (`gradedCount/totalWords`)
+   stays accurate. `AddToFlashcardsButton.handleForget()` also fires a
+   `toast.success` on its own regardless of caller, since silently doing
+   nothing visible after a destructive action left users unsure whether it
+   worked — this was a real reported bug, not a hypothetical.
 5. **Reappearance after a fail**: pure reinforcement, no further SM-2 write.
    No retry cap — a word can recycle indefinitely until passed.
 6. **Completion**: queue empty (every word passed at least once).

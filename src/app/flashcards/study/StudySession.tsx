@@ -176,6 +176,21 @@ export function StudySession({ deckId }: StudySessionProps) {
     setCurrentEntry(null);
   }
 
+  // "Quên vĩnh viễn" inside the reveal deletes the card entirely — drop it
+  // from the queue with no reinsertion (there's nothing left to reinsert)
+  // and from gradedRef so submitSession never references a now-deleted card
+  // id. Advances immediately rather than waiting for "Tiếp tục", since the
+  // word no longer exists to continue reviewing.
+  function handleWordForgotten() {
+    if (!current) return;
+    gradedRef.current.delete(current.id);
+    entryCacheRef.current.delete(current.simp);
+    setTotalWords((n) => Math.max(0, n - 1));
+    setQueue((prev) => prev.slice(1));
+    setRevealed(false);
+    setCurrentEntry(null);
+  }
+
   // Related/etymology words inside the revealed WordTabContent open in a new
   // tab — navigating away mid-session would abandon the in-memory queue.
   function handleExploreWord(exploreSimp: string) {
@@ -344,7 +359,9 @@ export function StudySession({ deckId }: StudySessionProps) {
                     <Loader2 className="h-5 w-5 animate-spin" />
                   </div>
                 )}
-                {currentEntry && <WordTabContent entry={currentEntry} onWordClick={handleExploreWord} />}
+                {currentEntry && (
+                  <WordTabContent entry={currentEntry} onWordClick={handleExploreWord} onForgotten={handleWordForgotten} />
+                )}
               </>
             )}
           </>
