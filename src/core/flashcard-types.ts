@@ -56,6 +56,46 @@ export const MASTERED_INTERVAL_DAYS = 21;
  * client-safety reason as MASTERED_INTERVAL_DAYS above. */
 export const LEECH_LAPSE_THRESHOLD = 3;
 
+/** Cap on never-reviewed cards (repetitions === 0) surfaced in a single study
+ * session. Only new cards are capped — due reviews (repetitions > 0) are
+ * never held back, since a review is due on a specific day for a reason
+ * (SM-2 calculated that as the optimal recall point) while a new card has no
+ * schedule to violate by starting it a day later. **Per session, not a hard
+ * per-calendar-day ceiling**: there's no counter tracking "already studied N
+ * new cards today" — finishing a session moves those cards' due_at forward
+ * (min 1 day), so they simply drop out of the due pool, and starting another
+ * session right away pulls the next batch. A user with the energy for
+ * several sessions in one sitting can clear more than this number in a day;
+ * this only bounds how much lands in front of them at once. Exists mainly
+ * for bursts of new cards — a big lookup session, or `backfill:flashcards`
+ * retroactively creating hundreds of same-day-due cards — that would
+ * otherwise dump the entire pile into one session. See
+ * .claude/docs/flashcards.md, "New-card cap per session", before touching
+ * this. */
+export const NEW_CARDS_PER_SESSION = 50;
+
+/** Splits an already-selected pool of cards (due cards, or the
+ * ahead-of-schedule "every active card" fallback — caller decides which) into
+ * due reviews (never capped) and never-reviewed cards capped at
+ * NEW_CARDS_PER_SESSION, oldest `createdAt` first. One implementation, shared by
+ * every place that needs to agree on "how many cards is today's session
+ * actually going to contain": `startSession()` (builds the real queue),
+ * `FlashcardEngine.getDecks()` (deck list "N cần ôn" caption), and
+ * `FlashcardEngine.getDeckMetrics()`/`getSystemMetrics()` (start-screen and
+ * dashboard due-today counts). If any of those numbers ever disagree, this is
+ * the one function to check first — see .claude/docs/flashcards.md, "Daily
+ * new-card cap". */
+export function capNewCards<T extends { repetitions: number; createdAt: string }>(
+  pool: T[]
+): { reviewCards: T[]; cappedNewCards: T[]; deferredNewCount: number } {
+  const newCards = pool
+    .filter((c) => c.repetitions === 0)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const reviewCards = pool.filter((c) => c.repetitions > 0);
+  const cappedNewCards = newCards.slice(0, NEW_CARDS_PER_SESSION);
+  return { reviewCards, cappedNewCards, deferredNewCount: newCards.length - cappedNewCards.length };
+}
+
 /**
  * SRS proficiency tier for a single card, shared by the deck-fluency color,
  * the mastery bar, and the HSK mastery bars — one definition, used everywhere:
@@ -80,7 +120,10 @@ export interface DeckListItem {
   id: string;
   kind: "manual" | "auto" | "excluded";
   title: string;
-  /** Due count for studyable decks; excluded-word count for the Excluded pseudo-deck. */
+  /** Due count for studyable decks, capped by NEW_CARDS_PER_SESSION (see
+   * capNewCards()) so this always matches what clicking "Học" actually opens
+   * — never a raw backlog number the session won't deliver today; excluded-
+   * word count (uncapped) for the Excluded pseudo-deck. */
   count: number;
   /** Total active cards in the deck regardless of due status — a deck with
    * total > 0 but count === 0 can still be studied (ahead of schedule), see

@@ -184,9 +184,9 @@ un-hides it back into exactly the decks it was already in.
      trong 24 giờ qua" rather than bare "Mới" to avoid colliding with the
      unrelated "Mới" mastery tier (never-reviewed) shown right above it in
      the same card.
-1. **Build queue**: due cards for the deck, shuffled. No daily new-card cap —
-   the start screen shows the full due count and lets the user optionally
-   pick a smaller session size, self-paced rather than system-throttled.
+1. **Build queue**: due cards for the deck, capped and shuffled — see
+   "New-card cap per session" below for how the cap works and why it
+   replaced the old manual session-size number input.
    **Ahead-of-schedule fallback**: if nothing in the deck is due yet,
    `startSession` doesn't block the deck — it falls back to every active
    card in the deck instead (`aheadOfSchedule: true` in `StartSessionResult`,
@@ -231,6 +231,109 @@ un-hides it back into exactly the decks it was already in.
    (non-practice) session, an `UPDATE flashcard_cards` per graded card too
    (see below). If the app closes mid-session, nothing is saved — not even
    cards already marked "Đã nhớ".
+
+## New-card cap per session
+
+**The problem this solves**: a due queue can spike far above what's
+reasonable to study in one sitting — a big lookup binge, or (the case that
+prompted this) `npm run backfill:flashcards` retroactively creating hundreds
+of cards for words already looked up before the flashcards feature existed,
+all landing with `due_at` = their original view timestamp, i.e. all
+immediately due at once. Before this cap, `startSession` put the *entire*
+due pool into the queue and the only throttle was a raw "how many words this
+session" number input on the start screen — a manual, per-session workaround
+that didn't stop the underlying due count from being e.g. 300 every time the
+deck was reopened.
+
+**The fix**: `capNewCards()` (`flashcard-types.ts`, client-safe pure
+function) splits an already-selected pool of cards into never-reviewed cards
+(`repetitions === 0`, i.e. `MasteryTier: "new"`) and already-reviewed cards
+(`repetitions > 0`, learning or mastered), sorts the new ones by `createdAt`
+ascending, and takes only the first `NEW_CARDS_PER_SESSION` (currently 50).
+**Due reviews are always included in full, uncapped** — a review is due on a
+specific day because SM-2 calculated that as the optimal recall point, and
+delaying it risks the word being forgotten before the next attempt; a new
+card has no such schedule to violate, so it's the only thing safe to
+throttle. This mirrors Anki's own new-cards/day vs. reviews/day split. The
+cap is **not** "50 cards total, prioritized new-to-mastered" — a deck with,
+say, 80 due reviews and a backlog of new cards would queue all 80 reviews
+plus up to 50 new ones (130 total), not 50.
+
+**Per session, not a hard per-calendar-day ceiling**: there's no counter
+tracking "already studied N new cards today." `submitSession` moves every
+graded card's `due_at` forward by at least 1 day the moment a session
+finishes, so those cards drop out of the due pool immediately — not at
+midnight. Starting another session right after pulls the *next* batch of up
+to `NEW_CARDS_PER_SESSION` oldest new cards, not the same ones, and not "come
+back tomorrow." A user with the energy for several sessions in one sitting
+can clear more than `NEW_CARDS_PER_SESSION` new cards in a day; the cap only
+bounds how many land in front of them at once.
+
+**One function, three callers, so no two "due today" numbers can ever
+disagree**:
+- `startSession()` (`app/actions/flashcards.ts`) calls it on the chosen pool
+  (due, or the ahead-of-schedule fallback) to build the actual session queue.
+- `FlashcardEngine.cappedDueCount()` (`flashcard-engine.ts`) calls it the
+  same way, just returning a count instead of the card lists, and backs
+  **every** "due today" number shown anywhere: `DeckListItem.count` (deck
+  list "N cần ôn" caption), `DeckMetrics.dueToday` (study-session start
+  screen), and `SystemMetrics.dueToday` (dashboard "Từ cần ôn hôm nay"
+  tile). All of these are guaranteed to equal the queue length
+  `startSession()` actually produces for that deck right now — a deck row
+  never promises more words than clicking "Học" will deliver. (Originally
+  shipped with these three left uncapped/inconsistent with the queue — e.g.
+  deck list showing "133 cần ôn" for a deck that only ever surfaces 50 new
+  cards a day — fixed by routing all of them through the same
+  `capNewCards()` call instead of each computing its own raw due count.)
+
+**Why no new schema/state was needed**: the backlog drains itself using
+fields that already exist. Cards graded in a session move their `due_at`
+forward (at minimum 1 day — see SM-2 above), so the *next* session's
+due-and-sorted pool — whether that's five minutes later or the next day —
+naturally excludes the just-graded batch and surfaces the next
+`NEW_CARDS_PER_SESSION` oldest cards, sorted by `createdAt` again. No
+"already shown today" flag, no separate queue table, no `due_at` rewriting
+at cap time.
+
+**`StartSessionResult.deferredNewCount`** is how many new cards were held
+back this way; `StudySession.tsx`'s start screen shows it as a caption below
+the (now-capped) due-count line ("N từ mới khác sẽ xuất hiện ở phiên học
+tiếp theo...") whenever it's `> 0` — the one place that still surfaces the
+"there's more behind this" detail, since the capped due-today number alone
+doesn't reveal that a bigger backlog exists. The caption explicitly says
+"phiên học tiếp theo" (next session), not "ngày mai" (tomorrow) — since
+opening another session immediately works too. This caption **replaced** the
+old manual "Số từ trong phiên này" number input — that input let a user
+shrink a session but did nothing about the underlying due count being huge
+every time the deck was reopened; the cap fixes the actual cause instead of
+the symptom.
+
+**Known rough edges / where to look first if this misbehaves**:
+- If a "due today" number looks wrong anywhere (deck list, start screen,
+  dashboard), check `FlashcardEngine.cappedDueCount()` first — all three
+  read from it, so a bug there propagates to all three at once. If only
+  *one* of them looks wrong, the bug is more likely in that call site's own
+  `cards` argument (e.g. wrong deck's word list) than in the cap itself.
+- `deck.total` (deck list, always shown) stays uncapped/absolute on
+  purpose — it's "how big is this deck," not "how many are due." Only
+  `deck.count` (due-today) is capped. Don't conflate the two when debugging
+  a report like "the deck list numbers don't add up."
+- `nextDueAt` (deck list "còn N ngày" / start-screen "Cần học lại...") is
+  only computed/shown when the capped due count is 0. Since the cap can
+  never reduce a genuinely non-empty due pool down to a displayed 0 (the cap
+  is 50, not 0), this can't fire while cards are actually waiting — but if
+  `NEW_CARDS_PER_SESSION` is ever set to 0, re-check this interaction.
+  `nextDueAt` itself is still computed from the raw due filter, not
+  `capNewCards()`.
+- `capNewCards()` is called on an already-selected *pool* (due, or the
+  ahead-of-schedule fallback) — it does not do its own due-filtering. A bug
+  in how that pool is computed upstream (in `startSession()` or
+  `cappedDueCount()`) would silently propagate to the queue, every "due
+  today" count, and `deferredNewCount` all at once.
+- The cap only ever changes *queue/count composition* — it does not touch
+  `submitSession`, the real-vs-practice branch, or SM-2 itself. A deferred
+  card behaves exactly like any other due-but-unstudied card everywhere else
+  in the app.
 
 ## Real vs. practice reviews — the cramming fix
 
@@ -464,6 +567,17 @@ Sourced from `getSystemMetrics()`. Every metric ships a **visible caption in
 the UI itself** explaining exactly how it's computed — not a tooltip, not
 this doc alone. If you add a new metric, give it the same treatment.
 
+**Layout**: the 4 hero stat tiles and the leech banner (if any leeches exist)
+are always visible — they're either headline numbers or an actionable
+alert. The mastery bar, HSK mastery bars, and activity heatmap are detail,
+not action items, so they're collapsed behind a single "Xem thêm thống kê"
+toggle (`showStats` state in `FlashcardDashboard.tsx`), collapsed by
+default. Not persisted across page loads — resets to collapsed every visit,
+since only "collapsed by default, one button to show" was asked for. If
+persistence is ever wanted, it'd be a localStorage read/write around
+`showStats`, same pattern as nothing else in this feature currently uses
+(all other flashcard UI state is either server-fetched or session-local).
+
 - **Từ cần ôn hôm nay** (due today) / **Đã học hôm nay** (words reviewed
   today, real + practice) / **Chuỗi ngày học** (streak) / **Tỷ lệ nhớ**
   (retention, all-time `passed_first_try / total_words`) — 4 stat tiles.
@@ -471,6 +585,25 @@ this doc alone. If you add a new metric, give it the same treatment.
   directly — `FlashcardDashboard.tsx` reads it off `computeHeatmap()`'s last
   cell (today, by definition — see below) instead of re-bucketing sessions,
   so it can never disagree with the heatmap's own today value.
+  - **"Từ cần ôn hôm nay"'s headline is `metrics.mastery.new`** (total
+    never-reviewed words, uncapped), not `metrics.dueToday`. This was a
+    deliberate product call, not an oversight: `dueToday` is capped by
+    `NEW_CARDS_PER_SESSION` (see "New-card cap per session" above), and once
+    it's capped it barely moves day to day regardless of how much you
+    actually study — a poor headline for a tile whose whole point is to
+    convey how much is left to learn. `mastery.new` stays true to the real
+    backlog size instead. The caption carries `metrics.dueToday` (the capped,
+    right-now-actionable number) plus `totalActive` and the cap value, so all
+    three numbers are still visible — just with the backlog as the headline
+    and the "what you can actually tackle right now" number folded into the
+    caption. Note this means the tile's headline is **not** the same number
+    as the "Tất cả" auto-deck's due count in the deck list right below it
+    (that row shows the capped `dueToday`-equivalent, via
+    `FlashcardEngine.cappedDueCount()`) — an earlier draft of this tile tried
+    to keep the two in lockstep and used `dueToday` as the headline for
+    exactly that reason, but was changed back to `mastery.new` on request.
+    Don't "fix" this apparent mismatch by swapping the headline back to
+    `dueToday` — it's intentional.
 - **Streak + activity heatmap are computed client-side**
   (`src/core/flashcard-streak.ts`), not server-side. Reason: "which calendar
   day" a session falls on depends on the viewer's local timezone, and this
@@ -538,6 +671,7 @@ components/home/FlashcardTeaser.tsx — due-count/streak summary on the homepage
 
 - `MASTERED_INTERVAL_DAYS = 21` (`flashcard-types.ts`)
 - `LEECH_LAPSE_THRESHOLD = 3` (`flashcard-types.ts`)
+- `NEW_CARDS_PER_SESSION = 50` (`flashcard-types.ts`) — see "New-card cap per session"
 - `MIN_CARDS_FOR_FLUENCY_COLOR = 3` (`flashcard-engine.ts`)
 - `SESSION_LOG_LIMIT = 500` (`actions/flashcards.ts`) — caps how much session
   history feeds the engine per request; plenty for the 14-week heatmap and

@@ -10,14 +10,19 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AppLayoutWithHistory } from "@/components/layout/AppLayoutWithHistory";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { WordTabContent } from "@/components/word/WordTabContent";
 import { DeckSessionsTable } from "./DeckSessionsTable";
 import { getWordEntries } from "@/app/actions";
 import { getDecks, getDeckMetrics, startSession, submitSession } from "@/app/actions/flashcards";
 import { gradeCard, type SrsQuality } from "@/core/srs";
-import { daysUntil, isAutoDeckId, type SessionQueueCard, type SessionResult } from "@/core/flashcard-types";
+import {
+  daysUntil,
+  isAutoDeckId,
+  NEW_CARDS_PER_SESSION,
+  type SessionQueueCard,
+  type SessionResult,
+} from "@/core/flashcard-types";
 import type { DeckMetrics } from "@/core/flashcard-engine";
 import type { WordEntry } from "@/core/types";
 import { toast } from "sonner";
@@ -52,8 +57,8 @@ export function StudySession({ deckId }: StudySessionProps) {
   const [phase, setPhase] = useState<Phase>("loading");
   const [deckTitle, setDeckTitle] = useState(deckId);
   const [fullQueue, setFullQueue] = useState<SessionQueueCard[]>([]);
-  const [sessionSize, setSessionSize] = useState<number>(0);
   const [aheadOfSchedule, setAheadOfSchedule] = useState(false);
+  const [deferredNewCount, setDeferredNewCount] = useState(0);
   const [metrics, setMetrics] = useState<DeckMetrics | null>(null);
 
   const [queue, setQueue] = useState<SessionQueueCard[]>([]);
@@ -81,8 +86,8 @@ export function StudySession({ deckId }: StudySessionProps) {
       const found = decks.find((d) => d.id === deckId);
       setDeckTitle(found?.title ?? deckId);
       setFullQueue(sessionResult.queue);
-      setSessionSize(sessionResult.queue.length);
       setAheadOfSchedule(sessionResult.aheadOfSchedule);
+      setDeferredNewCount(sessionResult.deferredNewCount);
       setMetrics(deckMetrics);
       setPhase("start");
     })();
@@ -92,14 +97,12 @@ export function StudySession({ deckId }: StudySessionProps) {
   }, [deckId]);
 
   function handleStart() {
-    const size = Math.max(0, Math.min(sessionSize, fullQueue.length));
-    const initial = fullQueue.slice(0, size || fullQueue.length);
     gradedRef.current = new Map();
     entryCacheRef.current = new Map();
     submittedRef.current = false;
     startedAtRef.current = new Date().toISOString();
-    setQueue(initial);
-    setTotalWords(initial.length);
+    setQueue(fullQueue);
+    setTotalWords(fullQueue.length);
     setTotalAttempts(0);
     setSkippedCount(0);
     setRevealed(false);
@@ -321,17 +324,13 @@ export function StudySession({ deckId }: StudySessionProps) {
                     </>
                   )}
                 </p>
-                <div className="flex items-center gap-2">
-                  <label className="text-sm text-muted-foreground shrink-0">Số từ trong phiên này</label>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={fullQueue.length}
-                    value={sessionSize}
-                    onChange={(e) => setSessionSize(Number(e.target.value))}
-                    className="h-8 w-24"
-                  />
-                </div>
+                {deferredNewCount > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {deferredNewCount} từ mới khác sẽ xuất hiện ở phiên học tiếp theo (mỗi phiên tối đa{" "}
+                    {NEW_CARDS_PER_SESSION} từ mới — có thể học ngay phiên khác nếu muốn; từ đang ôn lại không bị
+                    giới hạn này).
+                  </p>
+                )}
                 <Button onClick={handleStart}>Bắt đầu</Button>
               </Card>
             )}

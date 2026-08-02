@@ -3,6 +3,7 @@
 import { db, initSchema } from "@/lib/turso";
 import { GUEST_USER_ID } from "@/lib/aiConstants";
 import {
+  capNewCards,
   EXCLUDED_DECK_ID,
   isAutoDeckId,
   type DeckListItem,
@@ -424,21 +425,37 @@ export interface StartSessionResult {
    * rather than blocking the deck until something comes due. Cards graded
    * this way still update their SM-2 state normally on submit. */
   aheadOfSchedule: boolean;
+  /** New-tier cards (repetitions === 0) that were due but held back by
+   * NEW_CARDS_PER_SESSION — not lost, just excluded from *this* queue. Their
+   * due_at is untouched, so they surface in the next session (today or any
+   * day) once this batch has been graded and moved on. See
+   * .claude/docs/flashcards.md, "New-card cap per session". */
+  deferredNewCount: number;
 }
 
-export async function startSession(deckId: string, limit?: number): Promise<StartSessionResult> {
+/** Builds a session queue from due (or, if nothing's due, every active —
+ * "ahead of schedule") cards, then caps how many never-reviewed cards
+ * (repetitions === 0) go in: only NEW_CARDS_PER_SESSION, oldest-`createdAt`
+ * first, so a burst of new cards (a lookup binge, or backfill:flashcards
+ * dumping a whole history at once) drains in fixed-size batches across
+ * however many sessions it takes, instead of flooding one session. Due
+ * reviews (repetitions > 0) are never capped — see NEW_CARDS_PER_SESSION's
+ * doc comment for why. */
+export async function startSession(deckId: string): Promise<StartSessionResult> {
   const engine = await loadEngine();
-  if (!engine) return { queue: [], aheadOfSchedule: false };
+  if (!engine) return { queue: [], aheadOfSchedule: false, deferredNewCount: 0 };
   const words = engine.getDeckWords(deckId);
   const now = new Date().toISOString();
   const due = words.filter((c) => c.dueAt <= now);
   const aheadOfSchedule = due.length === 0 && words.length > 0;
   const pool = aheadOfSchedule ? words : due;
-  const shuffled = shuffle(pool);
-  const limited = limit && limit > 0 ? shuffled.slice(0, limit) : shuffled;
+
+  const { reviewCards, cappedNewCards, deferredNewCount } = capNewCards(pool);
+  const shuffled = shuffle([...reviewCards, ...cappedNewCards]);
   return {
-    queue: limited.map((c) => ({ ...c, isNew: c.repetitions === 0 })),
+    queue: shuffled.map((c) => ({ ...c, isNew: c.repetitions === 0 })),
     aheadOfSchedule,
+    deferredNewCount,
   };
 }
 

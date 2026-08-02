@@ -1,8 +1,10 @@
 "use client";
 
 /**
- * FlashcardDashboard — hero stats, mastery bar, HSK mastery, leech banner,
- * and an activity heatmap, rendered above the deck list on /flashcards.
+ * FlashcardDashboard — hero stats and leech banner (always visible), plus
+ * mastery bar / HSK mastery / activity heatmap (collapsed behind a single
+ * toggle by default — detail, not action items), rendered above the deck
+ * list on /flashcards.
  *
  * Streak + heatmap are computed client-side (see core/flashcard-streak.ts)
  * because day-bucketing depends on the viewer's local timezone; everything
@@ -13,14 +15,14 @@
  * definitions written out in full.
  */
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Flame, TrendingUp, Clock3, AlertTriangle, BookOpen } from "lucide-react";
+import { Flame, TrendingUp, Clock3, AlertTriangle, BookOpen, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { computeStreak, computeHeatmap, type HeatmapCell } from "@/core/flashcard-streak";
-import { MASTERED_INTERVAL_DAYS, LEECH_LAPSE_THRESHOLD } from "@/core/flashcard-types";
+import { MASTERED_INTERVAL_DAYS, LEECH_LAPSE_THRESHOLD, NEW_CARDS_PER_SESSION } from "@/core/flashcard-types";
 import type { SystemMetrics } from "@/core/flashcard-engine";
 
 interface FlashcardDashboardProps {
@@ -49,6 +51,12 @@ function chunkIntoWeeks(cells: HeatmapCell[]): HeatmapCell[][] {
 }
 
 export function FlashcardDashboard({ metrics }: FlashcardDashboardProps) {
+  // Mastery bar / HSK bars / activity heatmap are collapsed by default —
+  // they're detail, not action items, unlike the hero stats and leech
+  // banner above them which stay visible unconditionally. Not persisted
+  // (resets to collapsed each page load) since nothing was asked beyond
+  // "collapsed by default, one button to show".
+  const [showStats, setShowStats] = useState(false);
   const streak = useMemo(() => computeStreak(metrics.sessions), [metrics.sessions]);
   const heatmap = useMemo(() => computeHeatmap(metrics.sessions, HEATMAP_WEEKS), [metrics.sessions]);
   const weeksGrid = useMemo(() => chunkIntoWeeks(heatmap), [heatmap]);
@@ -78,8 +86,11 @@ export function FlashcardDashboard({ metrics }: FlashcardDashboardProps) {
             <Clock3 className="h-3.5 w-3.5" />
             Từ cần ôn hôm nay
           </div>
-          <p className="text-3xl font-semibold">{metrics.dueToday}</p>
-          <p className="text-xs text-muted-foreground">trên {metrics.totalActive} từ đang theo dõi</p>
+          <p className="text-3xl font-semibold">{metrics.mastery.new}</p>
+          <p className="text-xs text-muted-foreground">
+            từ mới chưa từng học, trên {metrics.totalActive} từ đang theo dõi. Học ngay được {metrics.dueToday} từ
+            (mỗi phiên tối đa {NEW_CARDS_PER_SESSION} từ mới — từ cần ôn lại luôn được tính đủ, không bị giới hạn).
+          </p>
         </Card>
 
         <Card className="p-4 gap-1">
@@ -116,68 +127,7 @@ export function FlashcardDashboard({ metrics }: FlashcardDashboardProps) {
         </Card>
       </div>
 
-      {/* Mastery bar */}
-      <Card className="p-4 gap-3">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-medium">Mức độ thành thạo</p>
-          <p className="text-xs text-muted-foreground">{masteryTotal} từ</p>
-        </div>
-        <div className="flex h-3 w-full rounded-full overflow-hidden gap-0.5 bg-muted">
-          {pct(metrics.mastery.new) > 0 && (
-            <div className="h-full bg-muted-foreground" style={{ width: `${pct(metrics.mastery.new)}%` }} />
-          )}
-          {pct(metrics.mastery.learning) > 0 && (
-            <div className="h-full bg-mastery-learning" style={{ width: `${pct(metrics.mastery.learning)}%` }} />
-          )}
-          {pct(metrics.mastery.mastered) > 0 && (
-            <div className="h-full bg-mastery-mastered" style={{ width: `${pct(metrics.mastery.mastered)}%` }} />
-          )}
-        </div>
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
-          <span className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-muted-foreground" /> Mới ({metrics.mastery.new})
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-mastery-learning" /> Đang học ({metrics.mastery.learning})
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-mastery-mastered" /> Thành thạo ({metrics.mastery.mastered})
-          </span>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Thành thạo = khoảng lặp lại (SM-2 interval) đã đạt {MASTERED_INTERVAL_DAYS} ngày trở lên. Đang học = đã
-          trả lời ít nhất 1 lần nhưng chưa đạt mốc đó. Mới = chưa từng được ôn.
-        </p>
-      </Card>
-
-      {/* HSK mastery */}
-      {metrics.hskMastery.length > 0 && (
-        <Card className="p-4 gap-3">
-          <p className="text-sm font-medium">Thành thạo theo cấp độ HSK</p>
-          <div className="flex flex-col gap-2">
-            {metrics.hskMastery.map((h) => {
-              const levelPct = h.total > 0 ? (h.mastered / h.total) * 100 : 0;
-              return (
-                <div key={h.level} className="flex items-center gap-3">
-                  <span className="text-xs text-muted-foreground w-14 shrink-0">HSK {h.level}</span>
-                  <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
-                    <div className="h-full bg-mastery-mastered" style={{ width: `${levelPct}%` }} />
-                  </div>
-                  <span className="text-xs text-muted-foreground w-24 shrink-0 text-right">
-                    {h.mastered}/{h.total} ({Math.round(levelPct)}%)
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Cấp độ HSK lấy từ độ khó thuật toán trong từ điển (chinese-lexicon), không phải danh sách từ vựng thi
-            HSK chính thức. Tỷ lệ chỉ tính trên những từ bạn đã lưu ở cấp đó, không phải toàn bộ từ vựng cấp đó.
-          </p>
-        </Card>
-      )}
-
-      {/* Leech banner */}
+      {/* Leech banner — actionable alert, stays visible regardless of the toggle below */}
       {metrics.leechCount > 0 && (
         <Card className="p-4 flex items-center justify-between gap-3 ring-destructive/30 bg-destructive/5">
           <div className="flex items-start gap-2 min-w-0">
@@ -196,28 +146,103 @@ export function FlashcardDashboard({ metrics }: FlashcardDashboardProps) {
         </Card>
       )}
 
-      {/* Activity heatmap */}
-      <Card className="p-4 gap-3">
-        <p className="text-sm font-medium">Hoạt động ôn tập ({HEATMAP_WEEKS} tuần gần nhất)</p>
-        <div className="flex gap-[3px] overflow-x-auto pb-1">
-          {weeksGrid.map((week, wi) => (
-            <div key={wi} className="flex flex-col gap-[3px]">
-              {week.map((cell) => (
-                <div
-                  key={cell.date}
-                  title={`${cell.date}: ${cell.count} từ ôn tập`}
-                  className={cn("h-3 w-3 rounded-sm", HEAT_CLASSES[cell.level])}
-                />
+      <Button
+        variant="outline"
+        size="sm"
+        className="self-start gap-1.5 text-muted-foreground"
+        onClick={() => setShowStats((v) => !v)}
+      >
+        {showStats ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+        {showStats ? "Ẩn bớt thống kê" : "Xem thêm thống kê"}
+      </Button>
+
+      {showStats && (
+        <>
+          {/* Mastery bar */}
+          <Card className="p-4 gap-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium">Mức độ thành thạo</p>
+              <p className="text-xs text-muted-foreground">{masteryTotal} từ</p>
+            </div>
+            <div className="flex h-3 w-full rounded-full overflow-hidden gap-0.5 bg-muted">
+              {pct(metrics.mastery.new) > 0 && (
+                <div className="h-full bg-muted-foreground" style={{ width: `${pct(metrics.mastery.new)}%` }} />
+              )}
+              {pct(metrics.mastery.learning) > 0 && (
+                <div className="h-full bg-mastery-learning" style={{ width: `${pct(metrics.mastery.learning)}%` }} />
+              )}
+              {pct(metrics.mastery.mastered) > 0 && (
+                <div className="h-full bg-mastery-mastered" style={{ width: `${pct(metrics.mastery.mastered)}%` }} />
+              )}
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-muted-foreground" /> Mới ({metrics.mastery.new})
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-mastery-learning" /> Đang học ({metrics.mastery.learning})
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-mastery-mastered" /> Thành thạo ({metrics.mastery.mastered})
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Thành thạo = khoảng lặp lại (SM-2 interval) đã đạt {MASTERED_INTERVAL_DAYS} ngày trở lên. Đang học = đã
+              trả lời ít nhất 1 lần nhưng chưa đạt mốc đó. Mới = chưa từng được ôn.
+            </p>
+          </Card>
+
+          {/* HSK mastery */}
+          {metrics.hskMastery.length > 0 && (
+            <Card className="p-4 gap-3">
+              <p className="text-sm font-medium">Thành thạo theo cấp độ HSK</p>
+              <div className="flex flex-col gap-2">
+                {metrics.hskMastery.map((h) => {
+                  const levelPct = h.total > 0 ? (h.mastered / h.total) * 100 : 0;
+                  return (
+                    <div key={h.level} className="flex items-center gap-3">
+                      <span className="text-xs text-muted-foreground w-14 shrink-0">HSK {h.level}</span>
+                      <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+                        <div className="h-full bg-mastery-mastered" style={{ width: `${levelPct}%` }} />
+                      </div>
+                      <span className="text-xs text-muted-foreground w-24 shrink-0 text-right">
+                        {h.mastered}/{h.total} ({Math.round(levelPct)}%)
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Cấp độ HSK lấy từ độ khó thuật toán trong từ điển (chinese-lexicon), không phải danh sách từ vựng thi
+                HSK chính thức. Tỷ lệ chỉ tính trên những từ bạn đã lưu ở cấp đó, không phải toàn bộ từ vựng cấp đó.
+              </p>
+            </Card>
+          )}
+
+          {/* Activity heatmap */}
+          <Card className="p-4 gap-3">
+            <p className="text-sm font-medium">Hoạt động ôn tập ({HEATMAP_WEEKS} tuần gần nhất)</p>
+            <div className="flex gap-[3px] overflow-x-auto pb-1">
+              {weeksGrid.map((week, wi) => (
+                <div key={wi} className="flex flex-col gap-[3px]">
+                  {week.map((cell) => (
+                    <div
+                      key={cell.date}
+                      title={`${cell.date}: ${cell.count} từ ôn tập`}
+                      className={cn("h-3 w-3 rounded-sm", HEAT_CLASSES[cell.level])}
+                    />
+                  ))}
+                </div>
               ))}
             </div>
-          ))}
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Màu đậm hơn = số từ ôn trong ngày đó nhiều hơn, so với ngày nhiều nhất trong {HEATMAP_WEEKS} tuần này
-          (không phải một mốc cố định). Ngày được tính theo giờ địa phương của thiết bị bạn đang dùng — nếu bạn
-          học trên nhiều thiết bị/múi giờ khác nhau, mỗi thiết bị có thể nhóm ngày hơi khác nhau gần ranh giới nửa đêm.
-        </p>
-      </Card>
+            <p className="text-xs text-muted-foreground">
+              Màu đậm hơn = số từ ôn trong ngày đó nhiều hơn, so với ngày nhiều nhất trong {HEATMAP_WEEKS} tuần này
+              (không phải một mốc cố định). Ngày được tính theo giờ địa phương của thiết bị bạn đang dùng — nếu bạn
+              học trên nhiều thiết bị/múi giờ khác nhau, mỗi thiết bị có thể nhóm ngày hơi khác nhau gần ranh giới nửa đêm.
+            </p>
+          </Card>
+        </>
+      )}
     </div>
   );
 }

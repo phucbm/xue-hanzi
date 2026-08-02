@@ -13,6 +13,7 @@
 
 import { getEntries } from "chinese-lexicon";
 import {
+  capNewCards,
   EXCLUDED_DECK_ID,
   isAutoDeckId,
   LEECH_LAPSE_THRESHOLD,
@@ -88,6 +89,9 @@ export interface HskMasteryLevel {
  * instead of every active card. */
 export interface DeckMetrics {
   total: number;
+  /** Capped by NEW_CARDS_PER_SESSION — see FlashcardEngine.cappedDueCount() —
+   * so this equals the exact queue length startSession() will produce for
+   * this deck right now, not the raw due backlog. */
   dueToday: number;
   /** Earliest due_at among not-yet-due cards, or null. Only meaningful when
    * dueToday === 0 — see FlashcardEngine.nextDueAt(). */
@@ -103,6 +107,9 @@ export interface DeckMetrics {
 
 export interface SystemMetrics {
   totalActive: number;
+  /** Capped by NEW_CARDS_PER_SESSION (see FlashcardEngine.cappedDueCount()) —
+   * matches the "Tất cả" auto-deck's due count in the deck list, not the raw
+   * across-every-word backlog. */
   dueToday: number;
   mastery: MasteryBreakdown;
   /** Only HSK levels actually present among the user's saved words. */
@@ -177,13 +184,21 @@ export class FlashcardEngine {
     return level;
   }
 
-  private dueCount(cards: FlashcardCard[], now: string): number {
-    return cards.filter((c) => c.dueAt <= now).length;
+  /** How many of `cards` would actually enter *today's* session queue: due
+   * reviews in full, plus never-reviewed cards capped at NEW_CARDS_PER_SESSION
+   * (see capNewCards()). This is the number shown everywhere a "due today"
+   * count appears — the deck list caption, the study-session start screen,
+   * and the dashboard's "Từ cần ôn hôm nay" tile — so none of them can ever
+   * promise more words than a session will actually contain. */
+  private cappedDueCount(cards: FlashcardCard[], now: string): number {
+    const due = cards.filter((c) => c.dueAt <= now);
+    const { reviewCards, cappedNewCards } = capNewCards(due);
+    return reviewCards.length + cappedNewCards.length;
   }
 
   /** Earliest `due_at` among cards not yet due — only meaningful when
-   * dueCount() is 0 (otherwise "next due" is already "now", conveyed by the
-   * due count itself). Null when the deck has no active cards at all. */
+   * cappedDueCount() is 0 (otherwise "next due" is already "now", conveyed by
+   * the due count itself). Null when the deck has no active cards at all. */
   private nextDueAt(cards: FlashcardCard[], now: string): string | null {
     const upcoming = cards.filter((c) => c.dueAt > now).map((c) => c.dueAt);
     if (upcoming.length === 0) return null;
@@ -263,7 +278,7 @@ export class FlashcardEngine {
         id,
         kind: "auto",
         title,
-        count: this.dueCount(memberCards, now),
+        count: this.cappedDueCount(memberCards, now),
         total: memberCards.length,
         nextDueAt: this.nextDueAt(memberCards, now),
         newLast24h: this.newCards(memberCards, now).length,
@@ -307,7 +322,7 @@ export class FlashcardEngine {
         id: deck.id,
         kind: "manual",
         title: deck.title,
-        count: this.dueCount(memberCards, now),
+        count: this.cappedDueCount(memberCards, now),
         total: memberCards.length,
         nextDueAt: this.nextDueAt(memberCards, now),
         newLast24h: this.newCards(memberCards, now).length,
@@ -388,7 +403,7 @@ export class FlashcardEngine {
     for (const c of cards) mastery[FlashcardEngine.classifyMastery(c)]++;
     return {
       total: cards.length,
-      dueToday: this.dueCount(cards, now),
+      dueToday: this.cappedDueCount(cards, now),
       nextDueAt: this.nextDueAt(cards, now),
       mastery,
       leechCount: cards.filter((c) => FlashcardEngine.isLeech(c)).length,
@@ -418,7 +433,7 @@ export class FlashcardEngine {
 
     return {
       totalActive: this.active.length,
-      dueToday: this.dueCount(this.active, now),
+      dueToday: this.cappedDueCount(this.active, now),
       mastery,
       hskMastery,
       leechCount: this.getLeechCards().length,
