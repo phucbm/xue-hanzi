@@ -110,13 +110,18 @@ ON CONFLICT (user_id, simp) DO NOTHING;
 and must never silently un-exclude a blacklisted word. Consequence: every
 lookup — even a one-off spelling check — permanently enters the SRS queue
 unless explicitly excluded afterward. `excluded_at` (see below) is the escape
-hatch. **Words viewed before this feature existed are not retroactively
-added** — there is no backfill in the codebase; a one-time backfill script was
-run directly against the database when this shipped (not committed — it read
-`user_history WHERE type='word'` and upserted each into `flashcard_cards`,
-using the original view timestamp as `created_at` so month-buckets stayed
-accurate). If this is ever needed again, same approach: a throwaway script,
-not a persisted feature.
+hatch. **Words viewed before this feature existed (or added via a path that
+skips `upsertFlashcardOnView`) are not retroactively added automatically** —
+run `npm run backfill:flashcards` (`scripts/backfill-flashcards.ts`) to catch
+them up. It reads `user_history WHERE type='word'`, upserts any label missing
+from `flashcard_cards` (`ON CONFLICT DO NOTHING`, so it's idempotent — safe
+to re-run anytime, e.g. after a manual DB import or while this feature is
+still pre-release and history predates it), and uses the word's *original*
+view timestamp as `created_at` so month-bucket auto-decks stay accurate
+instead of bucketing everything into "the month I happened to run the
+script." New cards land with `due_at` = that same past timestamp, so they
+show up as due immediately (see Deck taxonomy below) rather than waiting a
+full cycle before the user sees them.
 
 ## Deck taxonomy
 

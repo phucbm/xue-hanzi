@@ -4,6 +4,7 @@
 - Dev: `npm run dev`
 - Build: `npm run build`
 - Build dictionary: `npm run build:dict` (only when source data changes)
+- Backfill flashcards from history: `npm run backfill:flashcards` (idempotent, safe to re-run)
 
 ## Rules
 - Next.js 16 has breaking changes vs 13–15. Read `node_modules/next/dist/docs/` before writing any Next.js code; heed deprecation notices.
