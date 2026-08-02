@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { SearchIcon, History, RotateCw, Layers } from "lucide-react";
+import { toast } from "sonner";
 import { SearchDialog } from "@/components/search/search-dialog";
 import { RightSheet } from "@/components/layout/right-sheet";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -78,6 +79,10 @@ export function AppLayout({
     .filter((e) => e.type === "word")
     .slice(0, 5)
     .map((e) => e.label);
+
+  function handleFlashcardsLocked() {
+    toast.error("Đăng nhập bằng passphrase để dùng Flashcards");
+  }
 
   function handleSearchSelect(simp: string) {
     setSearchOpen(false);
@@ -164,26 +169,52 @@ export function AppLayout({
           <History className="h-4 w-4" />
         </Button>
 
-        {/* Flashcards — label on desktop, icon-only on mobile */}
-        <Button
-          variant="outline"
-          size="sm"
-          nativeButton={false}
-          className="h-8 gap-1.5 text-muted-foreground font-normal hidden sm:flex"
-          render={<Link href="/flashcards" />}
-        >
-          <Layers className="h-3.5 w-3.5" />
-          <span>Flashcards</span>
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          nativeButton={false}
-          className="h-8 w-8 sm:hidden"
-          render={<Link href="/flashcards" aria-label="Flashcards" />}
-        >
-          <Layers className="h-4 w-4" />
-        </Button>
+        {/* Flashcards — label on desktop, icon-only on mobile; locked until passphrase login */}
+        {passphrase ? (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              nativeButton={false}
+              className="h-8 gap-1.5 text-muted-foreground font-normal hidden sm:flex"
+              render={<Link href="/flashcards" />}
+            >
+              <Layers className="h-3.5 w-3.5" />
+              <span>Flashcards</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              nativeButton={false}
+              className="h-8 w-8 sm:hidden"
+              render={<Link href="/flashcards" aria-label="Flashcards" />}
+            >
+              <Layers className="h-4 w-4" />
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 text-muted-foreground/50 font-normal hidden sm:flex cursor-not-allowed"
+              onClick={handleFlashcardsLocked}
+              aria-label="Flashcards (cần đăng nhập)"
+            >
+              <Layers className="h-3.5 w-3.5" />
+              <span>Flashcards</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 sm:hidden text-muted-foreground/50"
+              onClick={handleFlashcardsLocked}
+              aria-label="Flashcards (cần đăng nhập)"
+            >
+              <Layers className="h-4 w-4" />
+            </Button>
+          </>
+        )}
 
         {/* Reload — icon-only, mobile only */}
         <Button
