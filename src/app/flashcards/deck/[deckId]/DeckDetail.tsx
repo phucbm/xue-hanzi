@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { AppLayoutWithHistory } from "@/components/layout/AppLayoutWithHistory";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { WordRow } from "@/components/search/WordRow";
@@ -87,7 +87,7 @@ export function DeckDetail({ deck, initialCards }: DeckDetailProps) {
   }
 
   return (
-    <AppLayout>
+    <AppLayoutWithHistory>
       <div className="max-w-2xl mx-auto w-full py-6 flex flex-col gap-6">
         <div className="flex items-center justify-between gap-3">
           {editingTitle ? (
@@ -172,6 +172,6 @@ export function DeckDetail({ deck, initialCards }: DeckDetailProps) {
           </div>
         )}
       </div>
-    </AppLayout>
+    </AppLayoutWithHistory>
   );
 }

@@ -8,7 +8,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { AppLayoutWithHistory } from "@/components/layout/AppLayoutWithHistory";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -158,7 +158,7 @@ export function StudySession({ deckId }: StudySessionProps) {
   const gradedCount = gradedRef.current.size;
 
   return (
-    <AppLayout>
+    <AppLayoutWithHistory>
       <div className="max-w-2xl mx-auto w-full py-6 flex flex-col gap-6">
         {phase === "loading" && (
           <div className="flex items-center justify-center py-24 text-muted-foreground">
@@ -257,6 +257,6 @@ export function StudySession({ deckId }: StudySessionProps) {
           </Card>
         )}
       </div>
-    </AppLayout>
+    </AppLayoutWithHistory>
   );
 }

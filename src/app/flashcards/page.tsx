@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { AppLayoutWithHistory } from "@/components/layout/AppLayoutWithHistory";
 import { getDecks } from "@/app/actions/flashcards";
 import { DeckList } from "./DeckList";
 
@@ -11,8 +11,8 @@ export const metadata: Metadata = {
 export default async function FlashcardsPage() {
   const decks = await getDecks();
   return (
-    <AppLayout>
+    <AppLayoutWithHistory>
       <DeckList initialDecks={decks} />
-    </AppLayout>
+    </AppLayoutWithHistory>
   );
 }

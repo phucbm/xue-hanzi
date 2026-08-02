@@ -17,7 +17,18 @@ export function WordDetailPage({ simp }: WordDetailPageProps) {
   const [activeTab, setActiveTab] = useState<string | undefined>();
   const [, startTransition] = useTransition();
 
-  const { history, addWordEntry, addSearchEntry, removeEntry, clearHistory } = useHistory();
+  const {
+    history,
+    addWordEntry,
+    addSearchEntry,
+    removeEntry,
+    clearHistory,
+    passphrase,
+    isSynced,
+    isSyncing,
+    authenticate,
+    logout,
+  } = useHistory();
 
   useEffect(() => {
     startTransition(async () => {
@@ -45,10 +56,16 @@ export function WordDetailPage({ simp }: WordDetailPageProps) {
 
   return (
     <AppLayout
+      onSearchSelect={openWord}
       history={history}
       onSearchQuery={addSearchEntry}
       onHistoryRemove={removeEntry}
       onHistoryClear={clearHistory}
+      passphrase={passphrase}
+      isSynced={isSynced}
+      isSyncing={isSyncing}
+      onAuthenticate={authenticate}
+      onLogout={logout}
     >
       <ContentArea
         entries={entries}

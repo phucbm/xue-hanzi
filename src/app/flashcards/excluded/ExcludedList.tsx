@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { AppLayoutWithHistory } from "@/components/layout/AppLayoutWithHistory";
 import { Button } from "@/components/ui/button";
 import { RotateCcw } from "lucide-react";
 import { toast } from "sonner";
@@ -48,7 +48,7 @@ export function ExcludedList({ initialCards }: ExcludedListProps) {
   }
 
   return (
-    <AppLayout>
+    <AppLayoutWithHistory>
       <div className="max-w-2xl mx-auto w-full py-6 flex flex-col gap-6">
         <div>
           <h1 className="text-xl font-bold">Đã loại trừ</h1>
@@ -95,6 +95,6 @@ export function ExcludedList({ initialCards }: ExcludedListProps) {
           </div>
         )}
       </div>
-    </AppLayout>
+    </AppLayoutWithHistory>
   );
 }
