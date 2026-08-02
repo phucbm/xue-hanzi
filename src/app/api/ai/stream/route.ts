@@ -50,7 +50,8 @@ const handler = async (req: NextRequest) => {
   const ip = getClientIp(req);
   const body = await req.json();
   const requestedModel = body.modelId as string | undefined;
-  if (isPaidModel(requestedModel) && !verifyHistoryPassphrase(req)) {
+  const authed = verifyHistoryPassphrase(req);
+  if (isPaidModel(requestedModel) && !authed) {
     return new Response("Cần đăng nhập để dùng model trả phí.", { status: 401 });
   }
   const resolvedModel = (isAllowedModel(requestedModel) ? requestedModel : null) ?? getDefaultModel().id;
@@ -67,7 +68,7 @@ const handler = async (req: NextRequest) => {
       tags: ["word-analysis"],
       metadata: { ip, model: resolvedModel },
     },
-    () => handleStream(req, body, resolvedModel, ip, rootCtx, rootSpan)
+    () => handleStream(req, body, resolvedModel, ip, authed, rootCtx, rootSpan)
   );
 };
 
@@ -76,6 +77,7 @@ const handleStream = async (
   body: Record<string, unknown>,
   resolvedModel: string,
   ip: string,
+  authed: boolean,
   rootCtx: ReturnType<typeof context.active>,
   rootSpan: ReturnType<typeof trace.getActiveSpan>
 ) => {
@@ -95,7 +97,7 @@ const handleStream = async (
 
   await ensureSchema();
 
-  if (db) {
+  if (db && !authed) {
     const cutoff = new Date(Date.now() - AI_WINDOW_MS).toISOString();
     const result = await db.execute({
       sql: "SELECT COUNT(*) as count FROM ai_usage_log WHERE user_id = ? AND called_at > ?",

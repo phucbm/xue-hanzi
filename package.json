@@ -1,7 +1,7 @@
 {
   "name": "hieu-chu-han",
   "title": "Hiểu Chữ Hán",
-  "version": "2.7.1",
+  "version": "2.8.0",
   "description": "Từ điển Trung - Hán Việt, phân tích chữ Hán, chiết tự.",
   "homepage": "https://hieuchuhan.phucbm.com",
   "private": true,
@@ -9,7 +9,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "build:dict": "tsx scripts/build-dictionary.ts"
+    "build:dict": "tsx scripts/build-dictionary.ts",
+    "backfill:flashcards": "tsx --env-file=.env.local scripts/backfill-flashcards.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.3.0",

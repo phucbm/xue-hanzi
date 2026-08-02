@@ -4,7 +4,9 @@ import Image from "next/image"
 import { WordTabs } from "@/components/word/WordTabs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
+import { FlashcardTeaser } from "@/components/home/FlashcardTeaser"
 import type { WordEntry } from "@/core/types"
+import type { SystemMetrics } from "@/core/flashcard-engine"
 import {
   IconSearch,
   IconBook2,
@@ -43,9 +45,10 @@ interface ContentAreaProps {
   isSynced?: boolean
   onOpenSearch?: () => void
   onOpenHistory?: () => void
+  flashcardMetrics?: SystemMetrics | null
 }
 
-export function ContentArea({ entries, activeTab, onTabChange, onWordClick, loading, recentWords, isSynced, onOpenSearch, onOpenHistory }: ContentAreaProps) {
+export function ContentArea({ entries, activeTab, onTabChange, onWordClick, loading, recentWords, isSynced, onOpenSearch, onOpenHistory, flashcardMetrics }: ContentAreaProps) {
   if (loading && entries.length === 0) {
     return (
       <div className="max-w-3xl mx-auto w-full py-4 flex flex-col gap-4">
@@ -83,6 +86,8 @@ export function ContentArea({ entries, activeTab, onTabChange, onWordClick, load
             <kbd className="ml-1 text-xs opacity-60 border rounded px-1 py-0.5 bg-background/20 leading-none">⌘K</kbd>
           </Button>
         </div>
+
+        <FlashcardTeaser metrics={flashcardMetrics ?? null} />
 
         {/* Recent words (returning users) OR starter suggestions (new users) */}
         <div className="flex flex-col gap-3">

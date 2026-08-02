@@ -3,6 +3,7 @@ import {Noto_Serif, Noto_Serif_SC} from "next/font/google";
 import {SwAutoUpdate} from "@/components/SwAutoUpdate";
 import {PWATracker} from "@/components/PWATracker";
 import {Toaster} from "@/components/ui/sonner";
+import {ThemeProvider} from "@/components/theme-provider";
 import pkg from "../../package.json";
 import "./globals.css";
 
@@ -64,13 +65,16 @@ export default function RootLayout({
   return (
     <html
       lang="vi"
+      suppressHydrationWarning
       className={`${notoSerif.variable} ${notoSerifSC.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground font-serif">
-        <SwAutoUpdate />
-        <PWATracker />
-        {children}
-        <Toaster />
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          <SwAutoUpdate />
+          <PWATracker />
+          {children}
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );

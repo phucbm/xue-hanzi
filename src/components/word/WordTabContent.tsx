@@ -20,15 +20,20 @@ import {Button} from "@/components/ui/button";
 import {CopyShareButton} from "@/components/shared/CopyShareButton";
 import {ReportIssueDialog} from "@/components/ReportIssueDialog";
 import {WordAIExplanation} from "@/components/word/WordAIExplanation";
+import {AddToFlashcardsButton} from "@/components/word/AddToFlashcardsButton";
 import {Braces, Flag} from "lucide-react";
 
 interface WordTabContentProps {
     entry: WordEntry;
     onWordClick: (simp: string) => void;
     recentWords?: string[];
+    /** Forwarded to AddToFlashcardsButton — called after "Quên vĩnh viễn"
+     * succeeds, e.g. so a study session can advance to the next word since
+     * this one no longer exists. */
+    onForgotten?: () => void;
 }
 
-export function WordTabContent({ entry, onWordClick, recentWords }: WordTabContentProps) {
+export function WordTabContent({ entry, onWordClick, recentWords, onForgotten }: WordTabContentProps) {
     const isSingleChar = [...entry.simp].length === 1 && /\p{Script=Han}/u.test(entry.simp);
     const [debugOpen, setDebugOpen] = useState(false);
 
@@ -39,6 +44,7 @@ export function WordTabContent({ entry, onWordClick, recentWords }: WordTabConte
 
                 {/* Action buttons — top right */}
                 <div className="action-buttons flex justify-end items-center gap-0.5">
+                    <AddToFlashcardsButton simp={wordKey(entry)} onForgotten={onForgotten}/>
                     <ReportIssueDialog url={typeof window !== "undefined" ? window.location.href : undefined}>
                         <Button
                             type="button"

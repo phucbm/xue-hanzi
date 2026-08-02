@@ -41,6 +41,7 @@ import { cn } from "@/lib/utils"
 import { searchWords } from "@/app/actions"
 import { HanziInput } from "@/components/hanzi/HanziInput"
 import { RecentSearch } from "@/components/search/RecentSearch"
+import { AddToFlashcardsButton } from "@/components/word/AddToFlashcardsButton"
 import type { WordEntry } from "@/core/types"
 
 type SearchMode = "text" | "draw"
@@ -196,10 +197,10 @@ export function SearchDialog({ open, onOpenChange, onSelect, recentWordLabels = 
             ) : (
               <ul>
                 {results.map((r, i) => (
-                  <li key={`${r.simp}-${i}`}>
+                  <li key={`${r.simp}-${i}`} className="flex items-center gap-1 pr-2">
                     <button
                       onClick={() => handleSelect(r.simp)}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-muted/50 transition-colors text-left"
+                      className="flex-1 min-w-0 flex items-center gap-3 px-4 py-2.5 hover:bg-muted/50 transition-colors text-left rounded-md"
                     >
                       <span className="font-chinese text-2xl w-10 text-center leading-none shrink-0">
                         {r.simp}
@@ -218,6 +219,7 @@ export function SearchDialog({ open, onOpenChange, onSelect, recentWordLabels = 
                         </span>
                       </span>
                     </button>
+                    <AddToFlashcardsButton simp={r.simp} />
                   </li>
                 ))}
               </ul>

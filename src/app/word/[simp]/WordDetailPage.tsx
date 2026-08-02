@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, useTransition, useRef } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ContentArea } from "@/components/layout/content-area";
 import { getWordEntries } from "@/app/actions";
+import { upsertFlashcardOnView } from "@/app/actions/flashcards";
 import { useHistory } from "@/hooks/useHistory";
 import { wordKey, type WordEntry } from "@/core/types";
 
@@ -16,7 +17,18 @@ export function WordDetailPage({ simp }: WordDetailPageProps) {
   const [activeTab, setActiveTab] = useState<string | undefined>();
   const [, startTransition] = useTransition();
 
-  const { history, addWordEntry, addSearchEntry, removeEntry, clearHistory } = useHistory();
+  const {
+    history,
+    addWordEntry,
+    addSearchEntry,
+    removeEntry,
+    clearHistory,
+    passphrase,
+    isSynced,
+    isSyncing,
+    authenticate,
+    logout,
+  } = useHistory();
 
   useEffect(() => {
     startTransition(async () => {
@@ -31,6 +43,7 @@ export function WordDetailPage({ simp }: WordDetailPageProps) {
     if (hasTrackedRef.current || entries.length === 0) return;
     hasTrackedRef.current = true;
     addWordEntry(wordKey(entries[0]));
+    void upsertFlashcardOnView(wordKey(entries[0]));
   }, [entries, addWordEntry]);
 
   const openWord = useCallback((newSimp: string) => {
@@ -43,10 +56,16 @@ export function WordDetailPage({ simp }: WordDetailPageProps) {
 
   return (
     <AppLayout
+      onSearchSelect={openWord}
       history={history}
       onSearchQuery={addSearchEntry}
       onHistoryRemove={removeEntry}
       onHistoryClear={clearHistory}
+      passphrase={passphrase}
+      isSynced={isSynced}
+      isSyncing={isSyncing}
+      onAuthenticate={authenticate}
+      onLogout={logout}
     >
       <ContentArea
         entries={entries}
