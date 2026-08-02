@@ -15,10 +15,6 @@ export default function HomePage() {
   const [isWordLoading, startDetailTransition] = useTransition();
   const [flashcardMetrics, setFlashcardMetrics] = useState<SystemMetrics | null>(null);
 
-  useEffect(() => {
-    getSystemMetrics().then(setFlashcardMetrics);
-  }, []);
-
   const {
     history,
     addWordEntry,
@@ -31,6 +27,14 @@ export default function HomePage() {
     authenticate,
     logout,
   } = useHistory();
+
+  useEffect(() => {
+    if (!passphrase) {
+      setFlashcardMetrics(null);
+      return;
+    }
+    getSystemMetrics().then(setFlashcardMetrics);
+  }, [passphrase]);
 
   const lastOpenedTabRef = useRef<string | null>(null);
 

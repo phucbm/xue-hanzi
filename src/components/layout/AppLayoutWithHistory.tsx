@@ -7,10 +7,12 @@
  */
 
 import { useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useHistory } from "@/hooks/useHistory";
 
 export function AppLayoutWithHistory({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const {
     history,
     addWordEntry,
@@ -32,6 +34,14 @@ export function AppLayoutWithHistory({ children }: { children: React.ReactNode }
     [addWordEntry]
   );
 
+  // Every route under AppLayoutWithHistory is /flashcards/* (gated by
+  // FlashcardsAuthGate), so signing out here always makes the current
+  // page invalid — leave it instead of leaving the user stranded on it.
+  const handleLogout = useCallback(() => {
+    logout();
+    router.push("/");
+  }, [logout, router]);
+
   return (
     <AppLayout
       onSearchSelect={handleSearchSelect}
@@ -43,7 +53,7 @@ export function AppLayoutWithHistory({ children }: { children: React.ReactNode }
       isSynced={isSynced}
       isSyncing={isSyncing}
       onAuthenticate={authenticate}
-      onLogout={logout}
+      onLogout={handleLogout}
     >
       {children}
     </AppLayout>
