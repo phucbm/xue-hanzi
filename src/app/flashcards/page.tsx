@@ -13,7 +13,7 @@ export default async function FlashcardsPage() {
   const [decks, metrics] = await Promise.all([getDecks(), getSystemMetrics()]);
   return (
     <AppLayoutWithHistory>
-      <div className="max-w-2xl mx-auto w-full py-6 flex flex-col gap-6">
+      <div className="max-w-4xl mx-auto w-full py-6 flex flex-col gap-6">
         {metrics && <FlashcardDashboard metrics={metrics} />}
         <DeckList initialDecks={decks} />
       </div>

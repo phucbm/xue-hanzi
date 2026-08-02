@@ -382,8 +382,13 @@ Sourced from `getSystemMetrics()`. Every metric ships a **visible caption in
 the UI itself** explaining exactly how it's computed — not a tooltip, not
 this doc alone. If you add a new metric, give it the same treatment.
 
-- **Từ cần ôn hôm nay** (due today) / **Tỷ lệ nhớ** (retention, all-time
-  `passed_first_try / total_words`) / **Chuỗi ngày học** (streak) — 3 stat tiles.
+- **Từ cần ôn hôm nay** (due today) / **Đã học hôm nay** (words reviewed
+  today, real + practice) / **Chuỗi ngày học** (streak) / **Tỷ lệ nhớ**
+  (retention, all-time `passed_first_try / total_words`) — 4 stat tiles.
+  "Đã học hôm nay" is computed client-side, not from `SystemMetrics`
+  directly — `FlashcardDashboard.tsx` reads it off `computeHeatmap()`'s last
+  cell (today, by definition — see below) instead of re-bucketing sessions,
+  so it can never disagree with the heatmap's own today value.
 - **Streak + activity heatmap are computed client-side**
   (`src/core/flashcard-streak.ts`), not server-side. Reason: "which calendar
   day" a session falls on depends on the viewer's local timezone, and this

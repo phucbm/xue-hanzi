@@ -17,7 +17,7 @@ import { useMemo } from "react";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Flame, TrendingUp, Clock3, AlertTriangle } from "lucide-react";
+import { Flame, TrendingUp, Clock3, AlertTriangle, BookOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { computeStreak, computeHeatmap, type HeatmapCell } from "@/core/flashcard-streak";
 import { MASTERED_INTERVAL_DAYS, LEECH_LAPSE_THRESHOLD } from "@/core/flashcard-types";
@@ -52,6 +52,11 @@ export function FlashcardDashboard({ metrics }: FlashcardDashboardProps) {
   const streak = useMemo(() => computeStreak(metrics.sessions), [metrics.sessions]);
   const heatmap = useMemo(() => computeHeatmap(metrics.sessions, HEATMAP_WEEKS), [metrics.sessions]);
   const weeksGrid = useMemo(() => chunkIntoWeeks(heatmap), [heatmap]);
+  // Heatmap's last cell is always today (see computeHeatmap) — reuse it
+  // instead of re-bucketing sessions, so "today" never disagrees with the
+  // heatmap's own today cell. Counts practice sessions too, same as the
+  // heatmap/streak: practice is real study time and should show as activity.
+  const learnedToday = heatmap.at(-1)?.count ?? 0;
 
   if (metrics.totalActive === 0) {
     return (
@@ -67,7 +72,7 @@ export function FlashcardDashboard({ metrics }: FlashcardDashboardProps) {
   return (
     <div className="flex flex-col gap-4">
       {/* Hero stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card className="p-4 gap-1">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Clock3 className="h-3.5 w-3.5" />
@@ -75,6 +80,17 @@ export function FlashcardDashboard({ metrics }: FlashcardDashboardProps) {
           </div>
           <p className="text-3xl font-semibold">{metrics.dueToday}</p>
           <p className="text-xs text-muted-foreground">trên {metrics.totalActive} từ đang theo dõi</p>
+        </Card>
+
+        <Card className="p-4 gap-1">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <BookOpen className="h-3.5 w-3.5" />
+            Đã học hôm nay
+          </div>
+          <p className="text-3xl font-semibold">{learnedToday}</p>
+          <p className="text-xs text-muted-foreground">
+            Lượt ôn (kể cả buổi luyện tập) tính theo ngày ở múi giờ của bạn.
+          </p>
         </Card>
 
         <Card className="p-4 gap-1">
