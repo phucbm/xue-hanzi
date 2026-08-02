@@ -158,14 +158,32 @@ un-hides it back into exactly the decks it was already in.
    fetches `getDeckMetrics(deckId)` (`FlashcardEngine.getDeckMetrics()`) —
    the same shape of info as the dashboard's `SystemMetrics` but scoped to
    this one deck: `total`, `dueToday`, `nextDueAt`, a `mastery` breakdown
-   (new/learning/mastered), and `leechCount`. Rendered as a compact card
-   (mini mastery bar + leech count + next-due line) above the "Bắt đầu"
-   button, so the user can judge whether restudying is worth it without
-   leaving the page. When `dueToday === 0` and `nextDueAt` is set, the card
-   shows **"Cần học lại vào ngày mai"** / **"Cần học lại trong N ngày nữa"**
+   (new/learning/mastered), `leechCount`, and `newCards` (see below).
+   Rendered as a compact card (mini mastery bar + leech count + next-due
+   line + newly-added chips) above the "Bắt đầu" button, so the user can
+   judge whether restudying is worth it without leaving the page. When
+   `dueToday === 0` and `nextDueAt` is set, the card shows **"Cần học lại
+   vào ngày mai"** / **"Cần học lại trong N ngày nữa"**
    (`formatNextDueMessage()`, built on the shared `daysUntil()` helper in
    `flashcard-types.ts` — the same helper backs `DeckList.tsx`'s terser
    "còn N ngày" row caption, so the two screens never disagree on the count).
+   - **Newly-added badge/list**: `DeckListItem.newLast24h` (deck list) and
+     `DeckMetrics.newCards` (start screen) both come from
+     `FlashcardEngine.newCards()` — cards whose `created_at` falls in a
+     **rolling 24h window from now**, not a calendar day. Deliberately keyed
+     on `created_at` alone, independent of `dueAt`/`repetitions`/mastery:
+     the point is "words you just looked up," so studying the deck today
+     must not make a just-added word disappear from the badge before the
+     24h window itself elapses. `DeckList.tsx` shows a small "N từ mới"
+     pill next to the deck title (`Sparkles` icon) whenever `newLast24h >
+     0` — the 24h window itself isn't spelled out in the badge text (it's
+     documented here instead), to keep the row from getting noisy; the
+     start-screen metrics card lists the actual words as clickable
+     chips (`c.simp`, opens `/word/[simp]` in a new tab via the same
+     `handleExploreWord` used by the in-session reveal). Worded "mới thêm
+     trong 24 giờ qua" rather than bare "Mới" to avoid colliding with the
+     unrelated "Mới" mastery tier (never-reviewed) shown right above it in
+     the same card.
 1. **Build queue**: due cards for the deck, shuffled. No daily new-card cap —
    the start screen shows the full due count and lets the user optionally
    pick a smaller session size, self-paced rather than system-throttled.
@@ -371,10 +389,12 @@ disables the "Học" button, see the ahead-of-schedule note above), `count`
 (due today), `nextDueAt` (earliest `due_at` among cards not yet due; only
 rendered when `count === 0` — if something's already due, the count itself
 already answers "when," so this is purely the "nothing to do right now, come
-back in N days" case), `fluency` (above), `lastScore` + `lastSessionAt`
-(score and `finished_at` of the deck's most recently completed session, both
-null if never studied) — together these are what a user needs to decide
-whether to restudy a deck without opening it.
+back in N days" case), `newLast24h` (count of cards created in a rolling 24h
+window — see the newly-added badge/list note under Study session flow),
+`fluency` (above), `lastScore` + `lastSessionAt` (score and `finished_at` of
+the deck's most recently completed session, both null if never studied) —
+together these are what a user needs to decide whether to restudy a deck
+without opening it.
 
 ## Dashboard (`/flashcards`, `FlashcardDashboard.tsx`)
 

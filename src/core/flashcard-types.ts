@@ -90,6 +90,11 @@ export interface DeckListItem {
    * deck has no active cards. Only meaningful/shown when count === 0 — if
    * count > 0 something is already due, so "next due" is effectively now. */
   nextDueAt: string | null;
+  /** Count of cards created in the last 24h (rolling window, not calendar
+   * day) — shown as a "N mới" badge regardless of due/mastery state, so
+   * studying the deck today doesn't make just-added words disappear from
+   * the badge until the 24h window itself elapses. */
+  newLast24h: number;
   /** passed_first_try / total_words of the most recent session for this deck, null if none. */
   lastScore: number | null;
   /** finished_at of that same most-recent session, null if none. */

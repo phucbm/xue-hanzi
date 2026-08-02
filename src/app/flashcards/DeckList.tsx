@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, ChevronRight, Ban } from "lucide-react";
+import { Plus, ChevronRight, Ban, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { createDeck, getDecks } from "@/app/actions/flashcards";
 import { cn } from "@/lib/utils";
@@ -52,7 +52,15 @@ function DeckRow({ deck, manage }: { deck: DeckListItem; manage?: boolean }) {
       <div className="min-w-0 flex items-center gap-2.5">
         {tier && <span className={cn("h-2 w-2 rounded-full shrink-0", FLUENCY_DOT[tier])} />}
         <div className="min-w-0">
-          <p className="text-sm font-medium truncate">{deck.title}</p>
+          <p className="text-sm font-medium truncate flex items-center gap-1.5">
+            <span className="truncate">{deck.title}</span>
+            {deck.newLast24h > 0 && (
+              <span className="inline-flex items-center gap-0.5 shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
+                <Sparkles className="h-2.5 w-2.5" />
+                {deck.newLast24h} từ mới
+              </span>
+            )}
+          </p>
           <p className="text-xs text-muted-foreground">
             {deck.total} từ
             {deck.count > 0

@@ -247,6 +247,25 @@ export function StudySession({ deckId }: StudySessionProps) {
                     <span className="h-2 w-2 rounded-full bg-mastery-mastered" /> Thành thạo ({metrics.mastery.mastered})
                   </span>
                 </div>
+                {metrics.newCards.length > 0 && (
+                  <div className="flex flex-col gap-1.5 pt-2 border-t">
+                    <p className="text-xs text-muted-foreground">
+                      {metrics.newCards.length} từ mới thêm trong 24 giờ qua
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {metrics.newCards.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => handleExploreWord(c.simp)}
+                          className="font-chinese text-sm px-2 py-1 rounded-md border bg-card hover:bg-accent transition-colors"
+                        >
+                          {c.simp}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </Card>
             )}
 

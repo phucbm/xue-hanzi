@@ -28,6 +28,12 @@ import {
  * is noise, not signal. */
 export const MIN_CARDS_FOR_FLUENCY_COLOR = 3;
 
+/** Rolling window (not calendar day) for the "newly added" badge/list — a
+ * card counts as new for a full 24h from its created_at regardless of
+ * review state, so studying a deck today doesn't make its just-added words
+ * disappear from the badge. */
+const NEW_WINDOW_MS = 24 * 60 * 60 * 1000;
+
 export interface DeckCardLink {
   deckId: string;
   cardId: string;
@@ -77,6 +83,10 @@ export interface DeckMetrics {
   mastery: MasteryBreakdown;
   leechCount: number;
   fluency: DeckFluency;
+  /** Cards created in the last 24h, most recent first — see
+   * FlashcardEngine.newCards(). Independent of dueAt/repetitions, so a word
+   * studied today still shows here until the 24h window elapses. */
+  newCards: FlashcardCard[];
 }
 
 export interface SystemMetrics {
@@ -168,6 +178,16 @@ export class FlashcardEngine {
     return upcoming.reduce((min, d) => (d < min ? d : min));
   }
 
+  /** Cards created within the last 24h, most recent first — independent of
+   * dueAt/repetitions, so a word studied today doesn't stop counting as
+   * "newly added" until the 24h window itself elapses. */
+  private newCards(cards: FlashcardCard[], now: string): FlashcardCard[] {
+    const cutoff = new Date(new Date(now).getTime() - NEW_WINDOW_MS).toISOString();
+    return cards
+      .filter((c) => c.createdAt >= cutoff)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
   private lastSessionMaps(): {
     byLabel: Map<string, LastSessionInfo>;
     byDeckId: Map<string, LastSessionInfo>;
@@ -228,6 +248,7 @@ export class FlashcardEngine {
         count: this.dueCount(memberCards, now),
         total: memberCards.length,
         nextDueAt: this.nextDueAt(memberCards, now),
+        newLast24h: this.newCards(memberCards, now).length,
         lastScore: last?.score ?? null,
         lastSessionAt: last?.finishedAt ?? null,
         lastSessionAheadOfSchedule: last?.aheadOfSchedule ?? false,
@@ -268,6 +289,7 @@ export class FlashcardEngine {
         count: this.dueCount(memberCards, now),
         total: memberCards.length,
         nextDueAt: this.nextDueAt(memberCards, now),
+        newLast24h: this.newCards(memberCards, now).length,
         lastScore: last?.score ?? null,
         lastSessionAt: last?.finishedAt ?? null,
         lastSessionAheadOfSchedule: last?.aheadOfSchedule ?? false,
@@ -282,6 +304,7 @@ export class FlashcardEngine {
       count: this.excludedCards.length,
       total: this.excludedCards.length,
       nextDueAt: null,
+      newLast24h: 0,
       lastScore: null,
       lastSessionAt: null,
       lastSessionAheadOfSchedule: false,
@@ -321,6 +344,7 @@ export class FlashcardEngine {
       mastery,
       leechCount: cards.filter((c) => FlashcardEngine.isLeech(c)).length,
       fluency: FlashcardEngine.fluencyOf(cards),
+      newCards: this.newCards(cards, now),
     };
   }
 
