@@ -30,6 +30,16 @@
   --color-chart-3: var(--chart-3);
   --color-chart-2: var(--chart-2);
   --color-chart-1: var(--chart-1);
+  /* Flashcard mastery tiers — validated via dataviz skill's CVD/contrast checker
+     (categorical, 2 slots + neutral "new"): passes lightness band, chroma floor,
+     CVD separation (deutan/protan), normal-vision floor, and contrast vs card surface. */
+  --color-mastery-learning: var(--mastery-learning);
+  --color-mastery-mastered: var(--mastery-mastered);
+  /* Sequential heatmap ramp — one hue (primary), monotone lightness, low→high activity. */
+  --color-heat-1: var(--heat-1);
+  --color-heat-2: var(--heat-2);
+  --color-heat-3: var(--heat-3);
+  --color-heat-4: var(--heat-4);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -79,6 +89,12 @@
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
+  --mastery-learning: oklch(0.60 0.13 262);
+  --mastery-mastered: oklch(0.45 0.15 145);
+  --heat-1: oklch(0.78 0.07 262);
+  --heat-2: oklch(0.63 0.11 262);
+  --heat-3: oklch(0.48 0.13 262);
+  --heat-4: oklch(0.34 0.14 262);
   --radius: 0.625rem;
   --sidebar:           oklch(0.935 0.022 78);
   --sidebar-foreground: oklch(0.18 0.025 55);
@@ -114,6 +130,12 @@
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
+  --mastery-learning: oklch(0.60 0.11 262);
+  --mastery-mastered: oklch(0.62 0.15 150);
+  --heat-1: oklch(0.30 0.06 262);
+  --heat-2: oklch(0.42 0.10 262);
+  --heat-3: oklch(0.55 0.12 262);
+  --heat-4: oklch(0.68 0.11 262);
   --sidebar:           oklch(0.21 0.022 60);
   --sidebar-foreground: oklch(0.93 0.018 78);
   --sidebar-primary:   oklch(0.72 0.1 262);

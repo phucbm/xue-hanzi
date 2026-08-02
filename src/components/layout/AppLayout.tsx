@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { SearchIcon, History, RotateCw, Layers } from "lucide-react";
 import { SearchDialog } from "@/components/search/search-dialog";
 import { RightSheet } from "@/components/layout/right-sheet";
+import { ThemeToggle } from "@/components/theme-toggle";
 import type { HistoryEntry } from "@/core/types";
 import pkg from "../../../package.json";
 
@@ -237,6 +238,7 @@ export function AppLayout({
               <DiscordIcon className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Discord</span>
             </a>
+            <ThemeToggle />
           </div>
         </div>
       </footer>

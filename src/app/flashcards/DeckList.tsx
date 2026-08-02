@@ -9,7 +9,8 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Plus, ChevronRight, Ban } from "lucide-react";
 import { toast } from "sonner";
 import { createDeck, getDecks } from "@/app/actions/flashcards";
-import type { DeckListItem } from "@/core/flashcard-types";
+import { cn } from "@/lib/utils";
+import type { DeckListItem, MasteryTier } from "@/core/flashcard-types";
 
 interface DeckListProps {
   initialDecks: DeckListItem[];
@@ -20,15 +21,37 @@ function formatScore(score: number | null): string | null {
   return `${Math.round(score * 100)}%`;
 }
 
+/** Same 3 tiers/colors as the dashboard's mastery bar — kept in sync so a
+ * deck's row tint always means the same thing as the mastery-bar legend. */
+const FLUENCY_BG: Record<MasteryTier, string> = {
+  new: "bg-muted-foreground/5",
+  learning: "bg-mastery-learning/8",
+  mastered: "bg-mastery-mastered/8",
+};
+const FLUENCY_DOT: Record<MasteryTier, string> = {
+  new: "bg-muted-foreground",
+  learning: "bg-mastery-learning",
+  mastered: "bg-mastery-mastered",
+};
+
 function DeckRow({ deck, manage }: { deck: DeckListItem; manage?: boolean }) {
   const score = formatScore(deck.lastScore);
+  const { tier, ratio } = deck.fluency;
   return (
-    <div className="flex items-center justify-between gap-3 px-4 py-3">
-      <div className="min-w-0">
-        <p className="text-sm font-medium truncate">{deck.title}</p>
-        <p className="text-xs text-muted-foreground">
-          {deck.count} từ cần ôn{score ? ` · Lần trước: ${score}` : ""}
-        </p>
+    <div className={cn("flex items-center justify-between gap-3 px-4 py-3", tier && FLUENCY_BG[tier])}>
+      <div className="min-w-0 flex items-center gap-2.5">
+        {tier && (
+          <span
+            className={cn("h-2 w-2 rounded-full shrink-0", FLUENCY_DOT[tier])}
+            title={`Mức độ thành thạo trung bình: ${Math.round((ratio ?? 0) * 100)}%`}
+          />
+        )}
+        <div className="min-w-0">
+          <p className="text-sm font-medium truncate">{deck.title}</p>
+          <p className="text-xs text-muted-foreground">
+            {deck.count} từ cần ôn{score ? ` · Lần trước: ${score}` : ""}
+          </p>
+        </div>
       </div>
       <div className="flex items-center gap-1.5 shrink-0">
         {manage && (
@@ -76,7 +99,7 @@ export function DeckList({ initialDecks }: DeckListProps) {
   const excluded = decks.find((d) => d.kind === "excluded");
 
   return (
-    <div className="max-w-2xl mx-auto w-full py-6 flex flex-col gap-6">
+    <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">Flashcards</h1>
         <Button size="sm" className="gap-1.5" onClick={() => setCreating(true)}>
@@ -84,6 +107,19 @@ export function DeckList({ initialDecks }: DeckListProps) {
           Bộ thẻ mới
         </Button>
       </div>
+
+      <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground -mt-2">
+        <span className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-muted-foreground" /> Mới
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-mastery-learning" /> Đang học
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-mastery-mastered" /> Thành thạo
+        </span>
+        <span>— màu thể hiện mức độ thành thạo trung bình của bộ thẻ (ẩn nếu bộ có dưới 3 từ)</span>
+      </p>
 
       <div>
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 px-1">Tự động</p>

@@ -4,14 +4,20 @@ import {useCallback, useEffect, useRef, useState, useTransition} from "react";
 import {AppLayout} from "@/components/layout/AppLayout";
 import {ContentArea} from "@/components/layout/content-area";
 import {getWordEntries} from "@/app/actions";
-import {upsertFlashcardOnView} from "@/app/actions/flashcards";
+import {upsertFlashcardOnView, getSystemMetrics} from "@/app/actions/flashcards";
 import {useHistory} from "@/hooks/useHistory";
 import {type WordEntry, wordKey} from "@/core/types";
+import type {SystemMetrics} from "@/core/flashcard-engine";
 
 export default function HomePage() {
   const [entries, setEntries]   = useState<WordEntry[]>([]);
   const [activeTab, setActiveTab] = useState<string | undefined>();
   const [isWordLoading, startDetailTransition] = useTransition();
+  const [flashcardMetrics, setFlashcardMetrics] = useState<SystemMetrics | null>(null);
+
+  useEffect(() => {
+    getSystemMetrics().then(setFlashcardMetrics);
+  }, []);
 
   const {
     history,
@@ -118,6 +124,7 @@ export default function HomePage() {
           isSynced={isSynced}
           onOpenSearch={openSearch}
           onOpenHistory={openHistory}
+          flashcardMetrics={flashcardMetrics}
         />
       )}
     </AppLayout>

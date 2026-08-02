@@ -2,7 +2,6 @@
 
 import { db, initSchema } from "@/lib/turso";
 import { GUEST_USER_ID } from "@/lib/aiConstants";
-import { getEntries } from "chinese-lexicon";
 import {
   EXCLUDED_DECK_ID,
   isAutoDeckId,
@@ -12,6 +11,18 @@ import {
   type SessionQueueCard,
   type SessionSubmitPayload,
 } from "@/core/flashcard-types";
+import {
+  FlashcardEngine,
+  type DeckCardLink,
+  type SessionLogRow,
+  type SystemMetrics,
+} from "@/core/flashcard-engine";
+
+/** Cap on how much session history feeds the engine per request — plenty for
+ * the "last score per deck" lookups, the retention rate, and the client-side
+ * streak/heatmap (last ~14 weeks), without the query growing unbounded as
+ * sessions accumulate over months of use. */
+const SESSION_LOG_LIMIT = 500;
 
 let schemaReady = false;
 
@@ -49,12 +60,52 @@ function toDeck(row: Record<string, unknown>): FlashcardDeck {
   };
 }
 
-function hskLevelOf(simp: string): number | undefined {
-  try {
-    return getEntries(simp)[0]?.statistics?.hskLevel;
-  } catch {
-    return undefined;
-  }
+/** Fetches every table the engine needs (4 queries) and constructs it. Every
+ * read-heavy action below goes through this — see FlashcardEngine for why
+ * the aggregation/grouping logic lives there instead of here. */
+async function loadEngine(): Promise<FlashcardEngine | null> {
+  if (!(await ready())) return null;
+
+  const [cardsRes, decksRes, deckCardsRes, sessionsRes] = await Promise.all([
+    db!.execute({
+      sql: "SELECT * FROM flashcard_cards WHERE user_id = ?",
+      args: [GUEST_USER_ID],
+    }),
+    db!.execute({
+      sql: "SELECT * FROM flashcard_decks WHERE user_id = ? ORDER BY sort_order ASC, created_at ASC",
+      args: [GUEST_USER_ID],
+    }),
+    db!.execute({
+      sql: `SELECT dc.deck_id, dc.card_id FROM flashcard_deck_cards dc
+            JOIN flashcard_decks d ON d.id = dc.deck_id
+            WHERE d.user_id = ?`,
+      args: [GUEST_USER_ID],
+    }),
+    db!.execute({
+      sql: `SELECT deck_id, deck_label, finished_at, total_words, passed_first_try
+            FROM flashcard_sessions WHERE user_id = ? ORDER BY finished_at DESC LIMIT ?`,
+      args: [GUEST_USER_ID, SESSION_LOG_LIMIT],
+    }),
+  ]);
+
+  const cards = cardsRes.rows.map((r) => toCard(r as Record<string, unknown>));
+  const decks = decksRes.rows.map((r) => toDeck(r as Record<string, unknown>));
+  const deckCards: DeckCardLink[] = deckCardsRes.rows.map((r) => {
+    const row = r as Record<string, unknown>;
+    return { deckId: row.deck_id as string, cardId: row.card_id as string };
+  });
+  const sessions: SessionLogRow[] = sessionsRes.rows.map((r) => {
+    const row = r as Record<string, unknown>;
+    return {
+      deckId: (row.deck_id as string | null) ?? null,
+      deckLabel: row.deck_label as string,
+      finishedAt: row.finished_at as string,
+      totalWords: row.total_words as number,
+      passedFirstTry: row.passed_first_try as number,
+    };
+  });
+
+  return new FlashcardEngine(cards, decks, deckCards, sessions);
 }
 
 function shuffle<T>(arr: T[]): T[] {
@@ -240,175 +291,33 @@ export async function restoreWord(simp: string): Promise<void> {
   });
 }
 
-// ── Deck list (due counts + last scores) ─────────────────────────────────────
+// ── Deck list (due counts + last scores + fluency) ───────────────────────────
 
 export async function getDecks(): Promise<DeckListItem[]> {
-  if (!(await ready())) return [];
-  const now = new Date().toISOString();
-
-  const [cardsRes, decksRes, sessionsRes] = await Promise.all([
-    db!.execute({
-      sql: "SELECT id, simp, due_at, lapses, created_at, excluded_at FROM flashcard_cards WHERE user_id = ?",
-      args: [GUEST_USER_ID],
-    }),
-    db!.execute({
-      sql: "SELECT * FROM flashcard_decks WHERE user_id = ? ORDER BY sort_order ASC, created_at ASC",
-      args: [GUEST_USER_ID],
-    }),
-    db!.execute({
-      sql: "SELECT deck_id, deck_label, passed_first_try, total_words, finished_at FROM flashcard_sessions WHERE user_id = ? ORDER BY finished_at DESC",
-      args: [GUEST_USER_ID],
-    }),
-  ]);
-
-  interface Row {
-    id: string;
-    simp: string;
-    dueAt: string;
-    lapses: number;
-    createdAt: string;
-    excludedAt: string | null;
-  }
-  const cards: Row[] = cardsRes.rows.map((r) => {
-    const row = r as Record<string, unknown>;
-    return {
-      id: row.id as string,
-      simp: row.simp as string,
-      dueAt: row.due_at as string,
-      lapses: row.lapses as number,
-      createdAt: row.created_at as string,
-      excludedAt: (row.excluded_at as string | null) ?? null,
-    };
-  });
-  const active = cards.filter((c) => !c.excludedAt);
-  const excludedCount = cards.length - active.length;
-
-  const lastScoreByLabel = new Map<string, number>();
-  const lastScoreByDeckId = new Map<string, number>();
-  for (const r of sessionsRes.rows) {
-    const row = r as Record<string, unknown>;
-    const totalWords = row.total_words as number;
-    const score = totalWords > 0 ? (row.passed_first_try as number) / totalWords : 0;
-    const deckId = row.deck_id as string | null;
-    const label = row.deck_label as string;
-    if (deckId) {
-      if (!lastScoreByDeckId.has(deckId)) lastScoreByDeckId.set(deckId, score);
-    } else if (!lastScoreByLabel.has(label)) {
-      lastScoreByLabel.set(label, score);
-    }
-  }
-
-  const dueCount = (list: Row[]) => list.filter((c) => c.dueAt <= now).length;
-
-  const items: DeckListItem[] = [];
-
-  items.push({ id: "all", kind: "auto", title: "Tất cả", count: dueCount(active), lastScore: lastScoreByLabel.get("all") ?? null });
-
-  const hskGroups = new Map<number, Row[]>();
-  for (const c of active) {
-    const hsk = hskLevelOf(c.simp);
-    if (hsk) {
-      if (!hskGroups.has(hsk)) hskGroups.set(hsk, []);
-      hskGroups.get(hsk)!.push(c);
-    }
-  }
-  for (const level of [...hskGroups.keys()].sort((a, b) => a - b)) {
-    const id = `hsk:${level}`;
-    items.push({ id, kind: "auto", title: `HSK ${level}`, count: dueCount(hskGroups.get(level)!), lastScore: lastScoreByLabel.get(id) ?? null });
-  }
-
-  const monthGroups = new Map<string, Row[]>();
-  for (const c of active) {
-    const ym = c.createdAt.slice(0, 7);
-    if (!monthGroups.has(ym)) monthGroups.set(ym, []);
-    monthGroups.get(ym)!.push(c);
-  }
-  for (const ym of [...monthGroups.keys()].sort().reverse()) {
-    const id = `month:${ym}`;
-    const [y, m] = ym.split("-");
-    items.push({ id, kind: "auto", title: `Tháng ${Number(m)}/${y}`, count: dueCount(monthGroups.get(ym)!), lastScore: lastScoreByLabel.get(id) ?? null });
-  }
-
-  const leech = active.filter((c) => c.lapses >= 3);
-  items.push({ id: "leech", kind: "auto", title: "Từ khó (leech)", count: dueCount(leech), lastScore: lastScoreByLabel.get("leech") ?? null });
-
-  if (decksRes.rows.length > 0) {
-    const deckIds = decksRes.rows.map((r) => (r as Record<string, unknown>).id as string);
-    const memberRes = await db!.execute({
-      sql: `SELECT deck_id, card_id FROM flashcard_deck_cards WHERE deck_id IN (${deckIds.map(() => "?").join(",")})`,
-      args: deckIds,
-    });
-    const activeById = new Map(active.map((c) => [c.id, c]));
-    const membersByDeck = new Map<string, Row[]>();
-    for (const r of memberRes.rows) {
-      const row = r as Record<string, unknown>;
-      const deckId = row.deck_id as string;
-      const cardId = row.card_id as string;
-      const card = activeById.get(cardId);
-      if (!card) continue; // excluded or missing — hide from manual decks too
-      if (!membersByDeck.has(deckId)) membersByDeck.set(deckId, []);
-      membersByDeck.get(deckId)!.push(card);
-    }
-    for (const r of decksRes.rows) {
-      const row = r as Record<string, unknown>;
-      const deckId = row.id as string;
-      const memberCards = membersByDeck.get(deckId) ?? [];
-      items.push({
-        id: deckId,
-        kind: "manual",
-        title: row.title as string,
-        count: dueCount(memberCards),
-        lastScore: lastScoreByDeckId.get(deckId) ?? null,
-      });
-    }
-  }
-
-  items.push({ id: EXCLUDED_DECK_ID, kind: "excluded", title: "Đã loại trừ", count: excludedCount, lastScore: null });
-
-  return items;
+  const engine = await loadEngine();
+  return engine ? engine.getDecks() : [];
 }
 
 // ── Deck detail / manage-words view ──────────────────────────────────────────
 
 export async function getDeckWords(deckId: string): Promise<FlashcardCard[]> {
-  if (!(await ready())) return [];
-  const cardsRes = await db!.execute({
-    sql: "SELECT * FROM flashcard_cards WHERE user_id = ?",
-    args: [GUEST_USER_ID],
-  });
-  const all = cardsRes.rows.map((r) => toCard(r as Record<string, unknown>));
+  const engine = await loadEngine();
+  return engine ? engine.getDeckWords(deckId) : [];
+}
 
-  if (deckId === EXCLUDED_DECK_ID) {
-    return all.filter((c) => c.excludedAt);
-  }
+// ── Dashboard metrics ─────────────────────────────────────────────────────────
 
-  const active = all.filter((c) => !c.excludedAt);
-
-  if (deckId === "all") return active;
-  if (deckId === "leech") return active.filter((c) => c.lapses >= 3);
-  if (deckId.startsWith("hsk:")) {
-    const level = Number(deckId.slice(4));
-    return active.filter((c) => hskLevelOf(c.simp) === level);
-  }
-  if (deckId.startsWith("month:")) {
-    const ym = deckId.slice(6);
-    return active.filter((c) => c.createdAt.slice(0, 7) === ym);
-  }
-
-  // Manual deck
-  const memberRes = await db!.execute({
-    sql: "SELECT card_id FROM flashcard_deck_cards WHERE deck_id = ?",
-    args: [deckId],
-  });
-  const memberIds = new Set(memberRes.rows.map((r) => (r as Record<string, unknown>).card_id as string));
-  return active.filter((c) => memberIds.has(c.id));
+export async function getSystemMetrics(): Promise<SystemMetrics | null> {
+  const engine = await loadEngine();
+  return engine ? engine.getSystemMetrics() : null;
 }
 
 // ── Study session ─────────────────────────────────────────────────────────────
 
 export async function startSession(deckId: string, limit?: number): Promise<SessionQueueCard[]> {
-  if (!(await ready())) return [];
-  const words = await getDeckWords(deckId);
+  const engine = await loadEngine();
+  if (!engine) return [];
+  const words = engine.getDeckWords(deckId);
   const now = new Date().toISOString();
   const due = words.filter((c) => c.dueAt <= now);
   const shuffled = shuffle(due);

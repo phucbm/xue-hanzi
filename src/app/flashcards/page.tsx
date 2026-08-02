@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { AppLayoutWithHistory } from "@/components/layout/AppLayoutWithHistory";
-import { getDecks } from "@/app/actions/flashcards";
+import { getDecks, getSystemMetrics } from "@/app/actions/flashcards";
+import { FlashcardDashboard } from "./FlashcardDashboard";
 import { DeckList } from "./DeckList";
 
 export const metadata: Metadata = {
@@ -9,10 +10,13 @@ export const metadata: Metadata = {
 };
 
 export default async function FlashcardsPage() {
-  const decks = await getDecks();
+  const [decks, metrics] = await Promise.all([getDecks(), getSystemMetrics()]);
   return (
     <AppLayoutWithHistory>
-      <DeckList initialDecks={decks} />
+      <div className="max-w-2xl mx-auto w-full py-6 flex flex-col gap-6">
+        {metrics && <FlashcardDashboard metrics={metrics} />}
+        <DeckList initialDecks={decks} />
+      </div>
     </AppLayoutWithHistory>
   );
 }
