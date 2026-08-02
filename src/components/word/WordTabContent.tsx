@@ -20,6 +20,7 @@ import {Button} from "@/components/ui/button";
 import {CopyShareButton} from "@/components/shared/CopyShareButton";
 import {ReportIssueDialog} from "@/components/ReportIssueDialog";
 import {WordAIExplanation} from "@/components/word/WordAIExplanation";
+import {AddToFlashcardsButton} from "@/components/word/AddToFlashcardsButton";
 import {Braces, Flag} from "lucide-react";
 
 interface WordTabContentProps {
@@ -39,6 +40,7 @@ export function WordTabContent({ entry, onWordClick, recentWords }: WordTabConte
 
                 {/* Action buttons — top right */}
                 <div className="action-buttons flex justify-end items-center gap-0.5">
+                    <AddToFlashcardsButton simp={wordKey(entry)}/>
                     <ReportIssueDialog url={typeof window !== "undefined" ? window.location.href : undefined}>
                         <Button
                             type="button"

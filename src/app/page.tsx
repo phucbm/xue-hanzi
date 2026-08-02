@@ -4,6 +4,7 @@ import {useCallback, useEffect, useRef, useState, useTransition} from "react";
 import {AppLayout} from "@/components/layout/AppLayout";
 import {ContentArea} from "@/components/layout/content-area";
 import {getWordEntries} from "@/app/actions";
+import {upsertFlashcardOnView} from "@/app/actions/flashcards";
 import {useHistory} from "@/hooks/useHistory";
 import {type WordEntry, wordKey} from "@/core/types";
 
@@ -38,6 +39,7 @@ export default function HomePage() {
           lastOpenedTabRef.current = key;
           setActiveTab(key);
           addWordEntry(wordKey(result[0]));
+          void upsertFlashcardOnView(wordKey(result[0]));
           const url =
             key === wordKey(result[0])
               ? `?word=${encodeURIComponent(simp)}`
@@ -67,6 +69,7 @@ export default function HomePage() {
       return;
     }
     addWordEntry(activeTab);
+    void upsertFlashcardOnView(activeTab);
   }, [activeTab, addWordEntry]);
 
   const handleHome = useCallback(() => {

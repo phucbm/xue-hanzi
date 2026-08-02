@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, useTransition, useRef } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ContentArea } from "@/components/layout/content-area";
 import { getWordEntries } from "@/app/actions";
+import { upsertFlashcardOnView } from "@/app/actions/flashcards";
 import { useHistory } from "@/hooks/useHistory";
 import { wordKey, type WordEntry } from "@/core/types";
 
@@ -31,6 +32,7 @@ export function WordDetailPage({ simp }: WordDetailPageProps) {
     if (hasTrackedRef.current || entries.length === 0) return;
     hasTrackedRef.current = true;
     addWordEntry(wordKey(entries[0]));
+    void upsertFlashcardOnView(wordKey(entries[0]));
   }, [entries, addWordEntry]);
 
   const openWord = useCallback((newSimp: string) => {

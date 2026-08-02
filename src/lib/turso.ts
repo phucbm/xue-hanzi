@@ -83,6 +83,52 @@ export async function initSchema() {
       )`,
       `CREATE INDEX IF NOT EXISTS idx_user_history_timestamp
         ON user_history(timestamp DESC)`,
+      `CREATE TABLE IF NOT EXISTS flashcard_cards (
+        id                TEXT PRIMARY KEY,
+        user_id           TEXT NOT NULL,
+        simp              TEXT NOT NULL,
+        ease_factor       REAL NOT NULL DEFAULT 2.5,
+        interval_days     INTEGER NOT NULL DEFAULT 0,
+        repetitions       INTEGER NOT NULL DEFAULT 0,
+        lapses            INTEGER NOT NULL DEFAULT 0,
+        due_at            TEXT NOT NULL,
+        last_reviewed_at  TEXT,
+        created_at        TEXT NOT NULL,
+        excluded_at       TEXT,
+        UNIQUE (user_id, simp)
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_flashcard_cards_due
+        ON flashcard_cards(user_id, due_at)`,
+      `CREATE INDEX IF NOT EXISTS idx_flashcard_cards_lapses
+        ON flashcard_cards(user_id, lapses)`,
+      `CREATE TABLE IF NOT EXISTS flashcard_decks (
+        id          TEXT PRIMARY KEY,
+        user_id     TEXT NOT NULL,
+        title       TEXT NOT NULL,
+        sort_order  INTEGER DEFAULT 0,
+        created_at  TEXT NOT NULL,
+        updated_at  TEXT NOT NULL
+      )`,
+      `CREATE TABLE IF NOT EXISTS flashcard_deck_cards (
+        deck_id   TEXT NOT NULL REFERENCES flashcard_decks(id) ON DELETE CASCADE,
+        card_id   TEXT NOT NULL REFERENCES flashcard_cards(id) ON DELETE CASCADE,
+        added_at  TEXT NOT NULL,
+        PRIMARY KEY (deck_id, card_id)
+      )`,
+      `CREATE TABLE IF NOT EXISTS flashcard_sessions (
+        id                 TEXT PRIMARY KEY,
+        user_id            TEXT NOT NULL,
+        deck_id            TEXT,
+        deck_label         TEXT NOT NULL,
+        started_at         TEXT NOT NULL,
+        finished_at        TEXT NOT NULL,
+        total_words        INTEGER NOT NULL,
+        passed_first_try   INTEGER NOT NULL,
+        failed_first_try   INTEGER NOT NULL,
+        total_attempts     INTEGER NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_flashcard_sessions_deck
+        ON flashcard_sessions(user_id, deck_label, finished_at DESC)`,
     ],
     "write"
   );

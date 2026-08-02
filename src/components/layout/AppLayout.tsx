@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { SearchIcon, History, RotateCw } from "lucide-react";
+import { SearchIcon, History, RotateCw, Layers } from "lucide-react";
 import { SearchDialog } from "@/components/search/search-dialog";
 import { RightSheet } from "@/components/layout/right-sheet";
 import type { HistoryEntry } from "@/core/types";
@@ -163,7 +163,26 @@ export function AppLayout({
           <History className="h-4 w-4" />
         </Button>
 
-
+        {/* Flashcards — label on desktop, icon-only on mobile */}
+        <Button
+          variant="outline"
+          size="sm"
+          nativeButton={false}
+          className="h-8 gap-1.5 text-muted-foreground font-normal hidden sm:flex"
+          render={<Link href="/flashcards" />}
+        >
+          <Layers className="h-3.5 w-3.5" />
+          <span>Flashcards</span>
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          nativeButton={false}
+          className="h-8 w-8 sm:hidden"
+          render={<Link href="/flashcards" aria-label="Flashcards" />}
+        >
+          <Layers className="h-4 w-4" />
+        </Button>
 
         {/* Reload — icon-only, mobile only */}
         <Button
