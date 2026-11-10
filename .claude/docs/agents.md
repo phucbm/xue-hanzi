@@ -6,7 +6,7 @@
 - Stream: SSE, temperature: 0, max_tokens: 16384
 
 ## Entry point
-`src/lib/groq.ts` — `streamWordAnalysis(simp, trad?, dictContext?, recentWords?, modelId?)` returns `AsyncGenerator<string>`, proxied via `POST /api/ai/stream`
+`src/lib/openrouter.ts` — `streamWordAnalysis(simp, trad?, dictContext?, recentWords?, modelId?)` returns the model, an `AsyncGenerator<string>` and the usage, proxied via `POST /api/ai/stream`. Paid models need the owner's login: the route checks the session cookie (`src/lib/session.ts`), sent with the same-origin request.
 
 Prompt template loaded server-side from `public/prompts/word-analysis.md` via `fs.readFile`.
 Placeholders: `{{simp}}`, `{{trad}}`, `{{trad_line}}`, `{{dict_context}}`, `{{recent_words}}`

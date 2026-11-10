@@ -19,12 +19,14 @@ Live at: **hieuchuhan.phucbm.com**
 | Framework | Next.js 16 App Router, React 19, TypeScript strict |
 | Styling | Tailwind v4 (`@theme inline`), shadcn/ui components |
 | PWA | Serwist (`@serwist/next`) — service worker in `src/app/sw.ts` |
-| Data | Static JSON served from `public/data/dictionary.json` |
-| Deploy | Vercel (static export, `output: 'export'`) |
+| Data | The dictionary: static JSON `public/data/dictionary.json`. The owner's data (history, flashcards, AI cache and usage): Turso, schema in `db/migrations/` (`.claude/docs/database.md`) |
+| Server | Next.js server runtime on Vercel: API routes (`src/app/api/`) and server actions (`src/app/actions/`) |
+| Login | One owner, no accounts: the passphrase sets an httpOnly session cookie (`src/lib/session.ts`) |
+| Deploy | Vercel, on every push to `main` |
 
 ## Key architectural decision: static dictionary
 
-`chinese-lexicon` is a Node.js-only package (CommonJS `require`). To run fully client-side:
+`chinese-lexicon` is a Node.js-only package (CommonJS `require`). So that search runs in the browser (and offline):
 
 1. **`scripts/build-dictionary.ts`** — run once locally to generate `public/data/dictionary.json` (28 MB, 116K entries enriched with CVDICT + kVietnamese). Committed to the repo.
 2. **`src/core/client-dictionary.ts`** — fetches the JSON lazily on first search, builds in-memory indices, implements `lookupWord()` and `getWordDetail()`.
@@ -88,11 +90,11 @@ app/
 
 components/
   layout/
-    hch-sidebar.tsx           — shadcn Sidebar with logo, nav, user footer
-    hch-nav-user.tsx          — Clerk-aware user avatar + sign-in/sign-up buttons
+    AppLayout.tsx             — header, nav (Flashcards link once logged in), search, right sheet
+    AppLayoutWithHistory.tsx  — AppLayout wired to useHistory() for routes outside the home page
     content-area.tsx          — main content pane: welcome state or WordTabs
-    right-sheet.tsx           — right-side notebook sheet (history + notes tabs)
-    ViewedWordList.tsx        — shared WordRow list for viewed-word history
+    right-sheet.tsx           — right-side sheet: history, and the passphrase login
+    HistoryList.tsx           — the lookup history list + login/logout
   search/
     search-dialog.tsx         — Cmd+K dialog: text input + Search button + handwriting pad
     WordRow.tsx               — generic row: simp + trad + pinyin + vi
@@ -104,7 +106,9 @@ components/
     EtymologySection          — component breakdown diagram
     RelatedSection            — topWords chip list
     DefinitionSection         — definitions list
-    WordAIExplanation         — GROQ-powered AI explanation
+    WordAIExplanation         — AI explanation (OpenRouter, see agents.md)
+    WordMaterialNote          — "Đã gặp ở": the owner's course lessons holding the word (material_words)
+    AddToFlashcardsButton     — decks, exclude, mark hard, forget
   shared/
     WordBadge                 — compact simp+pinyin chip
   HandwritingPad.tsx          — canvas for drawing; Pointer Events; Undo + Clear buttons
@@ -117,7 +121,7 @@ core/
   types.ts                    — WordEntry, WordSummary, ViewedWord, etc.
 
 hooks/
-  useViewedWords              — localStorage persistence (hch_viewed_words), viewedAt[] for count
+  useHistory                  — lookup history: localStorage, synced to Turso (`/api/history*`) when logged in
 ```
 
 ## Search flow
@@ -126,9 +130,9 @@ See `.claude/docs/ux-search.md` for the full interaction spec.
 
 Summary: user opens SearchDialog (Cmd+K or button) → types or draws → clicks **Tìm** or presses Enter → results appear → clicks a result → `openWord(simp)` → `getWordEntries(simp)` → `WordTabs` → dialog closes.
 
-## Viewed words flow
+## History flow
 
-`openWord(simp)` → `addViewedWord()` → `hch_viewed_words` in localStorage → `viewedAt[]` grows on each view → `viewedAt.length` is the view count shown in `WordRow`.
+`openWord(simp)` → `addWordEntry()` (useHistory) → localStorage, and when logged in `PUT /api/history/<id>` → Turso `user_history` (one row per word or search, last time and count). Logged in, a viewed word also becomes a flashcard (`upsertFlashcardOnView`, `.claude/docs/flashcards.md`).
 
 ## PWA / offline
 
