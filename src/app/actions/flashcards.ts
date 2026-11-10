@@ -11,6 +11,7 @@ import {
   type DeckSessionEntry,
   type FlashcardCard,
   type FlashcardDeck,
+  type MaterialLink,
   type ReviewLogEntry,
   type SessionQueueCard,
   type SessionSubmitPayload,
@@ -117,7 +118,63 @@ async function loadEngine(): Promise<FlashcardEngine | null> {
     };
   });
 
-  return new FlashcardEngine(cards, decks, deckCards, sessions);
+  return new FlashcardEngine(cards, decks, deckCards, sessions, await loadMaterial());
+}
+
+/** The study lessons' vocabulary from `material_words` (owned and rebuilt by the study repo, phucbm/ou-chinese-language
+ * `pnpm db:material`; see .claude/docs/database.md). The app runs without it: no table → no course/lesson decks. */
+async function loadMaterial(simp?: string): Promise<MaterialLink[]> {
+  try {
+    const res = await db!.execute({
+      sql: `SELECT DISTINCT simp, course, course_name, lesson, lesson_title FROM material_words WHERE kind = 'vocab'${simp ? " AND simp = ?" : ""}`,
+      args: simp ? [simp] : [],
+    });
+    return res.rows.map((r) => {
+      const row = r as Record<string, unknown>;
+      return { simp: row.simp as string, course: row.course as string, courseName: row.course_name as string, lesson: row.lesson as string, lessonTitle: row.lesson_title as string };
+    });
+  } catch (e) {
+    if (e instanceof Error && /no such table: material_words/.test(e.message)) return [];
+    throw e;
+  }
+}
+
+/** Where the owner met a word in their courses ("Đã gặp ở: Kỹ năng đọc 1 · B07"): the lessons whose vocabulary or
+ * sentences hold it. Owner only, like every flashcard read. */
+export interface WordMaterial {
+  course: string;
+  courseName: string;
+  lesson: string;
+  lessonTitle: string;
+  /** In the lesson's word list (vocab) or only in one of its sentences. */
+  inVocabulary: boolean;
+  sentence: string | null;
+}
+
+export async function getWordMaterial(simp: string): Promise<WordMaterial[]> {
+  if (!(await ready())) return [];
+  try {
+    const res = await db!.execute({
+      sql: "SELECT course, course_name, lesson, lesson_title, kind, sentence FROM material_words WHERE simp = ? ORDER BY course, lesson, kind DESC",
+      args: [simp.trim()],
+    });
+    const byLesson = new Map<string, WordMaterial>();
+    for (const r of res.rows) {
+      const row = r as Record<string, unknown>;
+      const key = `${row.course}/${row.lesson}`;
+      const cur = byLesson.get(key);
+      if (cur) {
+        cur.inVocabulary ||= row.kind === "vocab";
+        cur.sentence ??= (row.sentence as string | null) ?? null;
+        continue;
+      }
+      byLesson.set(key, { course: row.course as string, courseName: row.course_name as string, lesson: row.lesson as string, lessonTitle: row.lesson_title as string, inVocabulary: row.kind === "vocab", sentence: (row.sentence as string | null) ?? null });
+    }
+    return [...byLesson.values()];
+  } catch (e) {
+    if (e instanceof Error && /no such table: material_words/.test(e.message)) return [];
+    throw e;
+  }
 }
 
 function shuffle<T>(arr: T[]): T[] {
@@ -521,8 +578,8 @@ export async function submitSession(payload: SessionSubmitPayload): Promise<void
       const row = currentById.get(r.card.id);
       if (!row) continue; // word was forgotten mid-session — nothing to log against
       statements.push({
-        sql: `INSERT INTO flashcard_review_log (id, user_id, card_id, session_id, simp, quality, counted, ease_factor_after, interval_days_after, repetitions_after, lapses_after, reviewed_at)
-              VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`,
+        sql: `INSERT INTO flashcard_review_log (id, user_id, card_id, session_id, simp, quality, counted, ease_factor_after, interval_days_after, repetitions_after, lapses_after, reviewed_at, source)
+              VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 'app')`,
         args: [
           crypto.randomUUID(),
           GUEST_USER_ID,
@@ -556,8 +613,8 @@ export async function submitSession(payload: SessionSubmitPayload): Promise<void
         ],
       });
       statements.push({
-        sql: `INSERT INTO flashcard_review_log (id, user_id, card_id, session_id, simp, quality, counted, ease_factor_after, interval_days_after, repetitions_after, lapses_after, reviewed_at)
-              VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
+        sql: `INSERT INTO flashcard_review_log (id, user_id, card_id, session_id, simp, quality, counted, ease_factor_after, interval_days_after, repetitions_after, lapses_after, reviewed_at, source)
+              VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, 'app')`,
         args: [
           crypto.randomUUID(),
           GUEST_USER_ID,

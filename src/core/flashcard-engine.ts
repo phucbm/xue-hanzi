@@ -24,6 +24,7 @@ import {
   type FlashcardCard,
   type FlashcardDeck,
   type MasteryTier,
+  type MaterialLink,
 } from "./flashcard-types";
 
 /** Below this many active cards, a deck's fluency color is suppressed: a
@@ -136,7 +137,9 @@ export class FlashcardEngine {
     private readonly deckCards: DeckCardLink[],
     /** Must be ordered finished_at DESC — "last score" lookups take the
      * first match per deck as the most recent. */
-    private readonly sessions: SessionLogRow[]
+    private readonly sessions: SessionLogRow[],
+    /** The study lessons' vocabulary (material_words), for the course and lesson decks. Empty without the table. */
+    private readonly material: MaterialLink[] = []
   ) {
     this.active = cards.filter((c) => !c.excludedAt);
     this.excludedCards = cards.filter((c) => c.excludedAt);
@@ -263,6 +266,23 @@ export class FlashcardEngine {
     return groups;
   }
 
+  /** Active cards per study course or lesson (key `<course>` or `<course>/<lesson>`), with the deck's title, in the
+   * order of the courses and lessons. A word in two lessons is in both decks. */
+  getMaterialGroups(by: "course" | "lesson"): Map<string, { title: string; cards: FlashcardCard[] }> {
+    const bySimp = new Map(this.active.map((c) => [c.simp, c]));
+    const groups = new Map<string, { title: string; cards: FlashcardCard[]; seen: Set<string> }>();
+    const sorted = [...this.material].sort((a, b) => a.course.localeCompare(b.course) || a.lesson.localeCompare(b.lesson));
+    for (const m of sorted) {
+      const card = bySimp.get(m.simp);
+      if (!card) continue;
+      const key = by === "course" ? m.course : `${m.course}/${m.lesson}`;
+      if (!groups.has(key)) groups.set(key, { title: by === "course" ? m.courseName : `${m.courseName} · ${m.lesson}`, cards: [], seen: new Set() });
+      const g = groups.get(key)!;
+      if (!g.seen.has(card.id)) { g.seen.add(card.id); g.cards.push(card); }
+    }
+    return new Map([...groups].map(([k, { title, cards }]) => [k, { title, cards }]));
+  }
+
   getLeechCards(): FlashcardCard[] {
     return this.active.filter((c) => FlashcardEngine.isLeech(c));
   }
@@ -298,6 +318,9 @@ export class FlashcardEngine {
     for (const level of [...hskGroups.keys()].sort((a, b) => a - b)) {
       pushAuto(`hsk:${level}`, `HSK ${level}`, hskGroups.get(level)!);
     }
+
+    for (const [course, g] of this.getMaterialGroups("course")) pushAuto(`course:${course}`, g.title, g.cards);
+    for (const [key, g] of this.getMaterialGroups("lesson")) pushAuto(`lesson:${key}`, g.title, g.cards);
 
     const monthGroups = this.getMonthGroups();
     for (const ym of [...monthGroups.keys()].sort().reverse()) {
@@ -368,6 +391,8 @@ export class FlashcardEngine {
       const ym = deckId.slice(6);
       return this.getMonthGroups().get(ym) ?? [];
     }
+    if (deckId.startsWith("course:")) return this.getMaterialGroups("course").get(deckId.slice(7))?.cards ?? [];
+    if (deckId.startsWith("lesson:")) return this.getMaterialGroups("lesson").get(deckId.slice(7))?.cards ?? [];
     const memberIds = new Set(
       this.deckCards.filter((l) => l.deckId === deckId).map((l) => l.cardId)
     );

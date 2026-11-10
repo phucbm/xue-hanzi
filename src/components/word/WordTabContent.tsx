@@ -21,6 +21,7 @@ import {CopyShareButton} from "@/components/shared/CopyShareButton";
 import {ReportIssueDialog} from "@/components/ReportIssueDialog";
 import {WordAIExplanation} from "@/components/word/WordAIExplanation";
 import {AddToFlashcardsButton} from "@/components/word/AddToFlashcardsButton";
+import {WordMaterialNote} from "@/components/word/WordMaterialNote";
 import {Braces, Flag} from "lucide-react";
 
 interface WordTabContentProps {
@@ -75,6 +76,8 @@ export function WordTabContent({ entry, onWordClick, recentWords, onForgotten }:
                     <WordInfoBox entry={entry}/>
                     {isSingleChar && <StrokeBox simp={entry.simp} trad={entry.trad} defaultTrad={!!entry.key}/>}
                 </div>
+
+                <WordMaterialNote simp={wordKey(entry)}/>
 
 
                 {/* Debug dialog */}

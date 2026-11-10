@@ -152,6 +152,10 @@ Flashcards" control sets `excluded_at`, which hides the word everywhere
 (manual and auto) without touching manual-deck membership rows — restoring
 un-hides it back into exactly the decks it was already in.
 
+### Course and lesson decks (from the study repo)
+
+`course:<slug>` and `lesson:<course>/<lesson>` (e.g. `lesson:ky-nang-doc-1/B07`) are auto decks like `hsk:` and `month:`: the active cards whose word is in a lesson's vocabulary, read from `material_words` (the study repo's word index, `.claude/docs/database.md`) by `loadEngine()` → `FlashcardEngine.getMaterialGroups()`. A deck shows only when it has cards; without the table there are none. The word page shows the same lessons ("Đã gặp ở", `WordMaterialNote.tsx`, owner only).
+
 ## Study session flow
 
 0. **Start-screen metrics**: before a session begins, `StudySession.tsx`
@@ -414,6 +418,8 @@ written.
 card_id = ?`, alongside deleting the card itself) — "forget" means erasing
 all memory of the word, history included, not just resetting its SM-2 state.
 
+
+`source` (migration 002): `app` for every review the study screen writes (and every older row), `ouc` for one recorded by the OUC connector's `record_reviews` after a dictation or a test with Claude (`session_id` NULL). OUC's rule for a card not due: a fail counts (graded q=2, interval resets), a pass is practice (`counted=0`).
 ## Session history (`DeckSessionsTable.tsx`)
 
 `getDeckSessions(deckId)` → `FlashcardEngine.getDeckSessions()` returns every

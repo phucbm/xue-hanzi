@@ -27,13 +27,23 @@ export interface FlashcardDeck {
 }
 
 /** Auto decks are computed live, never stored as rows. */
-export type AutoDeckId = "all" | `hsk:${number}` | `month:${string}` | "leech";
+export type AutoDeckId = "all" | `hsk:${number}` | `month:${string}` | `course:${string}` | `lesson:${string}` | "leech";
+
+/** One word of a study lesson (the study repo's `material_words`, kind = vocab): feeds the course:<slug> and
+ * lesson:<course>/<lesson> auto decks and the word page's "Đã gặp ở". See .claude/docs/database.md. */
+export interface MaterialLink {
+  simp: string;
+  course: string;
+  courseName: string;
+  lesson: string;
+  lessonTitle: string;
+}
 
 /** Sentinel for the blacklist-management pseudo-deck (not studyable). */
 export const EXCLUDED_DECK_ID = "excluded";
 
 export function isAutoDeckId(id: string): boolean {
-  return id === "all" || id === "leech" || id.startsWith("hsk:") || id.startsWith("month:");
+  return id === "all" || id === "leech" || id.startsWith("hsk:") || id.startsWith("month:") || id.startsWith("course:") || id.startsWith("lesson:");
 }
 
 /** Whole days from now until an ISO due_at, rounded up (min 1). Shared by
