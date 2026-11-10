@@ -23,7 +23,7 @@ export function WordDetailPage({ simp }: WordDetailPageProps) {
     addSearchEntry,
     removeEntry,
     clearHistory,
-    passphrase,
+    loggedIn,
     isSynced,
     isSyncing,
     authenticate,
@@ -61,7 +61,7 @@ export function WordDetailPage({ simp }: WordDetailPageProps) {
       onSearchQuery={addSearchEntry}
       onHistoryRemove={removeEntry}
       onHistoryClear={clearHistory}
-      passphrase={passphrase}
+      loggedIn={loggedIn}
       isSynced={isSynced}
       isSyncing={isSyncing}
       onAuthenticate={authenticate}

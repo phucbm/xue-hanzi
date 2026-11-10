@@ -50,3 +50,6 @@ next-env.d.ts
 # serwist
 public/sw*
 public/swe-worker*
+
+# database dumps (npm run db:dump, before each migration)
+/db/dumps/

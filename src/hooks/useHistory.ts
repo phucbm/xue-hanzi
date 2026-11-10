@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { HistoryEntry } from "@/core/types";
-import { PASSPHRASE_KEY, setPassphrase as storePassphrase, clearPassphrase, authHeader } from "@/lib/passphrase";
+import { checkSession, isLoggedIn, login, logout as endSession } from "@/lib/passphrase";
 
 const STORAGE_KEY = "hch_history";
 const OLD_KEY = "hch_viewed_words";
@@ -97,25 +97,26 @@ function mergeWithCloud(local: HistoryEntry[], cloud: HistoryEntry[]): HistoryEn
 
 export function useHistory() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [passphrase, setPassphrase] = useState<string | null>(null);
+  const [loggedIn, setLoggedIn] = useState(false);
   const [isSynced, setIsSynced] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // ref so fire-and-forget callbacks always see latest passphrase
-  const passphraseRef = useRef<string | null>(null);
-  useEffect(() => {
-    passphraseRef.current = passphrase;
-  }, [passphrase]);
+  // ref so fire-and-forget callbacks always see the latest login state
+  const loggedInRef = useRef(false);
+  const markLoggedIn = useCallback((on: boolean) => {
+    loggedInRef.current = on;
+    setLoggedIn(on);
+  }, []);
 
-  const syncFromCloud = useCallback(async (pass: string, localEntries?: HistoryEntry[]) => {
+  // The session cookie goes with every same-origin fetch (src/lib/session.ts).
+  const syncFromCloud = useCallback(async (localEntries?: HistoryEntry[]) => {
     setIsSyncing(true);
     try {
-      const res = await fetch("/api/history", { headers: authHeader(pass) });
+      const res = await fetch("/api/history");
       if (!res.ok) {
         if (res.status === 401) {
-          clearPassphrase();
-          setPassphrase(null);
-          passphraseRef.current = null;
+          await endSession();
+          markLoggedIn(false);
         }
         return;
       }
@@ -130,19 +131,18 @@ export function useHistory() {
     } finally {
       setIsSyncing(false);
     }
-  }, []);
+  }, [markLoggedIn]);
 
   useEffect(() => {
     const stored = readStorage();
     const migrated = stored.length === 0 ? migrate(stored) : stored;
     setHistory(migrated);
-    const savedPass = localStorage.getItem(PASSPHRASE_KEY); // read via key; passphrase.ts manages writes
-    if (savedPass) {
-      setPassphrase(savedPass);
-      passphraseRef.current = savedPass;
-      syncFromCloud(savedPass, migrated);
-    }
-  }, [syncFromCloud]);
+    if (isLoggedIn()) markLoggedIn(true);
+    checkSession().then((ok) => {
+      markLoggedIn(ok);
+      if (ok) syncFromCloud(migrated);
+    });
+  }, [syncFromCloud, markLoggedIn]);
 
   const addEntry = useCallback(
     (type: HistoryEntry["type"], label: string) => {
@@ -160,11 +160,10 @@ export function useHistory() {
         };
         const next = [entry, ...filtered].slice(0, MAX);
         writeStorage(next);
-        const pass = passphraseRef.current;
-        if (pass) {
+        if (loggedInRef.current) {
           fetch(`/api/history/${entry.id}`, {
             method: "PUT",
-            headers: { ...authHeader(pass), "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify(entry),
           }).catch(() => {});
         }
@@ -188,12 +187,8 @@ export function useHistory() {
     setHistory((prev) => {
       const next = prev.filter((e) => e.id !== id);
       writeStorage(next);
-      const pass = passphraseRef.current;
-      if (pass) {
-        fetch(`/api/history/${id}`, {
-          method: "DELETE",
-          headers: authHeader(pass),
-        }).catch(() => {});
+      if (loggedInRef.current) {
+        fetch(`/api/history/${id}`, { method: "DELETE" }).catch(() => {});
       }
       return next;
     });
@@ -205,12 +200,8 @@ export function useHistory() {
     } catch {
       // ignore
     }
-    const pass = passphraseRef.current;
-    if (pass) {
-      fetch("/api/history", {
-        method: "DELETE",
-        headers: authHeader(pass),
-      }).catch(() => {});
+    if (loggedInRef.current) {
+      fetch("/api/history", { method: "DELETE" }).catch(() => {});
     }
     setHistory([]);
   }, []);
@@ -218,29 +209,22 @@ export function useHistory() {
   const authenticate = useCallback(
     async (pass: string): Promise<boolean> => {
       try {
-        const res = await fetch("/api/history/verify", {
-          method: "POST",
-          headers: authHeader(pass),
-        });
-        if (!res.ok) return false;
-        storePassphrase(pass);
-        setPassphrase(pass);
-        passphraseRef.current = pass;
-        await syncFromCloud(pass);
+        if (!(await login(pass))) return false;
+        markLoggedIn(true);
+        await syncFromCloud();
         return true;
       } catch {
         return false;
       }
     },
-    [syncFromCloud]
+    [syncFromCloud, markLoggedIn]
   );
 
   const logout = useCallback(() => {
-    clearPassphrase();
-    setPassphrase(null);
-    passphraseRef.current = null;
+    void endSession();
+    markLoggedIn(false);
     setIsSynced(false);
-  }, []);
+  }, [markLoggedIn]);
 
   return {
     history,
@@ -248,7 +232,7 @@ export function useHistory() {
     addWordEntry,
     removeEntry,
     clearHistory,
-    passphrase,
+    loggedIn,
     isSynced,
     isSyncing,
     authenticate,

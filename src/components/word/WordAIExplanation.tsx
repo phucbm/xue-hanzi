@@ -26,7 +26,7 @@ import { IconAlertTriangle } from "@tabler/icons-react";
 import { MovingBorder } from "@/components/phucbm/moving-border";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AI_MODELS, getDefaultModel, getModelById, calcCost, type AiModel } from "@/lib/aiModels";
-import { getPassphrase } from "@/lib/passphrase";
+import { isLoggedIn as loggedInHint } from "@/lib/passphrase";
 
 const AI_MODEL_STORAGE_KEY = "hch_selected_ai_model";
 const AI_MODEL_ERRORS_KEY = "hch_ai_model_errors";
@@ -170,7 +170,7 @@ export function WordAIExplanation({ simp, trad, wordEntry, recentWords }: WordAI
   const [selectedModel, setSelectedModel] = useState<AiModel>(getSavedModel);
   const [modelErrors, setModelErrors] = useState<Record<string, string>>(getModelErrors);
   const [lastUsage, setLastUsage] = useState<StreamUsage | null>(null);
-  const isLoggedIn = !!getPassphrase();
+  const isLoggedIn = loggedInHint();
   const visibleModels = AI_MODELS.filter((m) => !m.paid || isLoggedIn);
 
   function handleSelectModel(m: AiModel) {
@@ -224,7 +224,7 @@ export function WordAIExplanation({ simp, trad, wordEntry, recentWords }: WordAI
     setLastUsage(null);
 
     try {
-      const { model: aiModel, stream, usage } = await streamWordAnalysis(simp, trad, dictContext, recentWords, selectedModel.id, getPassphrase() ?? undefined);
+      const { model: aiModel, stream, usage } = await streamWordAnalysis(simp, trad, dictContext, recentWords, selectedModel.id);
       setStatus("streaming");
 
       let full = "";

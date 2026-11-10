@@ -8,7 +8,7 @@ correctness over minimalism.
 
 ## Data model (Turso)
 
-Defined in `src/lib/turso.ts` (`initSchema()`).
+Defined in `db/migrations/` (see `.claude/docs/database.md`).
 
 ```sql
 -- One row per (user, word) ever added to flashcards. Deck-independent SRS state.

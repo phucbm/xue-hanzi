@@ -19,7 +19,7 @@ export function AppLayoutWithHistory({ children }: { children: React.ReactNode }
     addSearchEntry,
     removeEntry,
     clearHistory,
-    passphrase,
+    loggedIn,
     isSynced,
     isSyncing,
     authenticate,
@@ -35,7 +35,7 @@ export function AppLayoutWithHistory({ children }: { children: React.ReactNode }
   );
 
   // Every route under AppLayoutWithHistory is /flashcards/* (gated by
-  // FlashcardsAuthGate), so signing out here always makes the current
+  // the server-side redirect in src/app/flashcards/layout.tsx), so signing out here always makes the current
   // page invalid — leave it instead of leaving the user stranded on it.
   const handleLogout = useCallback(() => {
     logout();
@@ -49,7 +49,7 @@ export function AppLayoutWithHistory({ children }: { children: React.ReactNode }
       history={history}
       onHistoryRemove={removeEntry}
       onHistoryClear={clearHistory}
-      passphrase={passphrase}
+      loggedIn={loggedIn}
       isSynced={isSynced}
       isSyncing={isSyncing}
       onAuthenticate={authenticate}

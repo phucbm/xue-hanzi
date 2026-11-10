@@ -1,6 +1,6 @@
 "use server";
 
-import { db, initSchema } from "@/lib/turso";
+import { db } from "@/lib/turso";
 import { GUEST_USER_ID } from "@/lib/aiConstants";
 
 export interface AiExplanation {
@@ -11,15 +11,8 @@ export interface AiExplanation {
   generatedAt: string;
 }
 
-let schemaReady = false;
-
 async function ready(): Promise<boolean> {
-  if (!db) return false;
-  if (!schemaReady) {
-    await initSchema();
-    schemaReady = true;
-  }
-  return true;
+  return db != null;
 }
 
 function toExplanation(row: Record<string, unknown>): AiExplanation {

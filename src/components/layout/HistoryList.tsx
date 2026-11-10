@@ -16,7 +16,7 @@ interface HistoryListProps {
   onSelect: (label: string) => void;
   onRemove: (id: string) => void;
   onClear: () => void;
-  passphrase?: string | null;
+  loggedIn?: boolean;
   isSynced?: boolean;
   isSyncing?: boolean;
   onAuthenticate?: (pass: string) => Promise<boolean>;
@@ -28,7 +28,7 @@ export function HistoryList({
   onSelect,
   onRemove,
   onClear,
-  passphrase,
+  loggedIn,
   isSynced,
   isSyncing,
   onAuthenticate,
@@ -83,7 +83,7 @@ export function HistoryList({
 
   const syncFooter = (
     <div className="mt-3 pt-3 border-t">
-      {passphrase ? (
+      {loggedIn ? (
         <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
           <span className="flex items-center gap-1.5">
             {isSyncing ? (

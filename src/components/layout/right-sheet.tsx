@@ -17,7 +17,7 @@ interface RightSheetProps {
   onSelect: (label: string) => void
   onRemove: (id: string) => void
   onClear: () => void
-  passphrase?: string | null
+  loggedIn?: boolean
   isSynced?: boolean
   isSyncing?: boolean
   onAuthenticate?: (pass: string) => Promise<boolean>
@@ -31,7 +31,7 @@ export function RightSheet({
   onSelect,
   onRemove,
   onClear,
-  passphrase,
+  loggedIn,
   isSynced,
   isSyncing,
   onAuthenticate,
@@ -55,7 +55,7 @@ export function RightSheet({
               }}
               onRemove={onRemove}
               onClear={onClear}
-              passphrase={passphrase}
+              loggedIn={loggedIn}
               isSynced={isSynced}
               isSyncing={isSyncing}
               onAuthenticate={onAuthenticate}

@@ -1,19 +1,11 @@
 import { NextRequest } from "next/server";
 import { readFile } from "fs/promises";
 import path from "path";
-import { db, initSchema } from "@/lib/turso";
+import { db } from "@/lib/turso";
 import { IP_DAILY_LIMIT, AI_WINDOW_MS } from "@/lib/aiConstants";
 
 const AI_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 
-let schemaReady = false;
-
-async function ensureSchema() {
-  if (!schemaReady && db) {
-    await initSchema();
-    schemaReady = true;
-  }
-}
 
 function getClientIp(req: NextRequest): string {
   return (
@@ -36,7 +28,6 @@ export async function POST(req: NextRequest) {
     return new Response("Dữ liệu không hợp lệ.", { status: 400 });
   }
 
-  await ensureSchema();
 
   if (db) {
     const ip = getClientIp(req);

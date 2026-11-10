@@ -1,16 +1,15 @@
 import { NextResponse } from "next/server";
-import { db, initSchema } from "@/lib/turso";
-import { verifyHistoryPassphrase } from "@/lib/historyAuth";
+import { db } from "@/lib/turso";
+import { isAuthedRequest } from "@/lib/session";
 
 export async function PUT(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!verifyHistoryPassphrase(req))
+  if (!isAuthedRequest(req))
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!db)
     return NextResponse.json({ error: "DB unavailable" }, { status: 503 });
-  await initSchema();
   const { id } = await params;
   const body = await req.json();
   await db.execute({
@@ -32,11 +31,10 @@ export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!verifyHistoryPassphrase(req))
+  if (!isAuthedRequest(req))
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!db)
     return NextResponse.json({ error: "DB unavailable" }, { status: 503 });
-  await initSchema();
   const { id } = await params;
   await db.execute({
     sql: "DELETE FROM user_history WHERE id = ?",

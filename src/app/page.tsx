@@ -21,7 +21,7 @@ export default function HomePage() {
     addSearchEntry,
     removeEntry,
     clearHistory,
-    passphrase,
+    loggedIn,
     isSynced,
     isSyncing,
     authenticate,
@@ -29,12 +29,12 @@ export default function HomePage() {
   } = useHistory();
 
   useEffect(() => {
-    if (!passphrase) {
+    if (!loggedIn) {
       setFlashcardMetrics(null);
       return;
     }
     getSystemMetrics().then(setFlashcardMetrics);
-  }, [passphrase]);
+  }, [loggedIn]);
 
   const lastOpenedTabRef = useRef<string | null>(null);
 
@@ -108,7 +108,7 @@ export default function HomePage() {
       history={history}
       onHistoryRemove={removeEntry}
       onHistoryClear={clearHistory}
-      passphrase={passphrase}
+      loggedIn={loggedIn}
       isSynced={isSynced}
       isSyncing={isSyncing}
       onAuthenticate={authenticate}

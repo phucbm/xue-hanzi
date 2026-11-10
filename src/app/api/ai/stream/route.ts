@@ -2,24 +2,16 @@ import { NextRequest } from "next/server";
 import { after } from "next/server";
 import { readFile } from "fs/promises";
 import path from "path";
-import { db, initSchema } from "@/lib/turso";
+import { db } from "@/lib/turso";
 import { IP_DAILY_LIMIT, AI_WINDOW_MS } from "@/lib/aiConstants";
 import { isAllowedModel, isPaidModel, getDefaultModel } from "@/lib/aiModels";
-import { verifyHistoryPassphrase } from "@/lib/historyAuth";
+import { isAuthedRequest } from "@/lib/session";
 import { observe, propagateAttributes, setActiveTraceIO, LangfuseOtelSpanAttributes } from "@langfuse/tracing";
 import { context, trace } from "@opentelemetry/api";
 import { langfuseSpanProcessor } from "@/instrumentation";
 
 const AI_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 
-let schemaReady = false;
-
-async function ensureSchema() {
-  if (!schemaReady && db) {
-    await initSchema();
-    schemaReady = true;
-  }
-}
 
 function getClientIp(req: NextRequest): string {
   return (
@@ -50,7 +42,7 @@ const handler = async (req: NextRequest) => {
   const ip = getClientIp(req);
   const body = await req.json();
   const requestedModel = body.modelId as string | undefined;
-  const authed = verifyHistoryPassphrase(req);
+  const authed = isAuthedRequest(req);
   if (isPaidModel(requestedModel) && !authed) {
     return new Response("Cần đăng nhập để dùng model trả phí.", { status: 401 });
   }
@@ -95,7 +87,6 @@ const handleStream = async (
     return new Response("Dữ liệu không hợp lệ.", { status: 400 });
   }
 
-  await ensureSchema();
 
   if (db && !authed) {
     const cutoff = new Date(Date.now() - AI_WINDOW_MS).toISOString();

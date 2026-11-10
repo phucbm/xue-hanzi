@@ -1,14 +1,13 @@
 import { NextResponse } from "next/server";
-import { db, initSchema } from "@/lib/turso";
-import { verifyHistoryPassphrase } from "@/lib/historyAuth";
+import { db } from "@/lib/turso";
+import { isAuthedRequest } from "@/lib/session";
 import type { HistoryEntry } from "@/core/types";
 
 export async function GET(req: Request) {
-  if (!verifyHistoryPassphrase(req))
+  if (!isAuthedRequest(req))
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!db)
     return NextResponse.json({ error: "DB unavailable" }, { status: 503 });
-  await initSchema();
   const result = await db.execute(
     "SELECT id, type, label, timestamp, view_count FROM user_history ORDER BY timestamp DESC"
   );
@@ -23,11 +22,10 @@ export async function GET(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  if (!verifyHistoryPassphrase(req))
+  if (!isAuthedRequest(req))
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!db)
     return NextResponse.json({ error: "DB unavailable" }, { status: 503 });
-  await initSchema();
   await db.execute("DELETE FROM user_history");
   return NextResponse.json({ ok: true });
 }

@@ -9,10 +9,9 @@ export async function streamWordAnalysis(
     dictContext?: string,
     recentWords?: string[],
     modelId?: string,
-    passphrase?: string,
 ): Promise<{ model: string; stream: AsyncGenerator<string>; usage: Promise<StreamUsage | null> }> {
+    // The owner's session cookie (src/lib/session.ts) goes with this same-origin request.
     const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (passphrase) headers["Authorization"] = `Bearer ${passphrase}`;
     const res = await fetch("/api/ai/stream", {
         method: "POST",
         headers,

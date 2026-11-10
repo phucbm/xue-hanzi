@@ -39,7 +39,7 @@ interface AppLayoutProps {
   history?: HistoryEntry[];
   onHistoryRemove?: (id: string) => void;
   onHistoryClear?: () => void;
-  passphrase?: string | null;
+  loggedIn?: boolean;
   isSynced?: boolean;
   isSyncing?: boolean;
   onAuthenticate?: (pass: string) => Promise<boolean>;
@@ -54,7 +54,7 @@ export function AppLayout({
   history = [],
   onHistoryRemove,
   onHistoryClear,
-  passphrase,
+  loggedIn,
   isSynced,
   isSyncing,
   onAuthenticate,
@@ -170,7 +170,7 @@ export function AppLayout({
         </Button>
 
         {/* Flashcards — label on desktop, icon-only on mobile; locked until passphrase login */}
-        {passphrase ? (
+        {loggedIn ? (
           <>
             <Button
               variant="outline"
@@ -289,7 +289,7 @@ export function AppLayout({
         onSelect={handleSearchSelect}
         onRemove={onHistoryRemove ?? (() => {})}
         onClear={onHistoryClear ?? (() => {})}
-        passphrase={passphrase}
+        loggedIn={loggedIn}
         isSynced={isSynced}
         isSyncing={isSyncing}
         onAuthenticate={onAuthenticate}

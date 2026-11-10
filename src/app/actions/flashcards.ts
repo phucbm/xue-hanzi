@@ -1,6 +1,7 @@
 "use server";
 
-import { db, initSchema } from "@/lib/turso";
+import { db } from "@/lib/turso";
+import { hasSession, requireSession } from "@/lib/session";
 import { GUEST_USER_ID } from "@/lib/aiConstants";
 import {
   capNewCards,
@@ -28,15 +29,16 @@ import {
  * sessions accumulate over months of use. */
 const SESSION_LOG_LIMIT = 500;
 
-let schemaReady = false;
-
+/** Reads (and the auto-add on view): only for the owner's logged-in device, nothing otherwise — the word pages
+ * and the home page are public and call these for every visitor. */
 async function ready(): Promise<boolean> {
-  if (!db) return false;
-  if (!schemaReady) {
-    await initSchema();
-    schemaReady = true;
-  }
-  return true;
+  return db != null && (await hasSession());
+}
+
+/** Writes: throw unless the owner is logged in on this device (src/lib/session.ts). */
+async function writable(): Promise<boolean> {
+  await requireSession();
+  return db != null;
 }
 
 function toCard(row: Record<string, unknown>): FlashcardCard {
@@ -199,7 +201,7 @@ export async function getDeck(deckId: string): Promise<FlashcardDeck | null> {
 }
 
 export async function createDeck(title: string): Promise<FlashcardDeck | null> {
-  if (!(await ready())) return null;
+  if (!(await writable())) return null;
   const trimmed = title.trim();
   if (!trimmed) return null;
 
@@ -222,7 +224,7 @@ export async function createDeck(title: string): Promise<FlashcardDeck | null> {
 }
 
 export async function renameDeck(deckId: string, title: string): Promise<void> {
-  if (!(await ready())) return;
+  if (!(await writable())) return;
   const trimmed = title.trim();
   if (!trimmed) return;
   await db!.execute({
@@ -232,7 +234,7 @@ export async function renameDeck(deckId: string, title: string): Promise<void> {
 }
 
 export async function deleteDeck(deckId: string): Promise<void> {
-  if (!(await ready())) return;
+  if (!(await writable())) return;
   await db!.batch(
     [
       { sql: "DELETE FROM flashcard_deck_cards WHERE deck_id = ?", args: [deckId] },
@@ -247,7 +249,7 @@ export async function deleteDeck(deckId: string): Promise<void> {
 /** Creates the flashcard_cards row if missing; deliberately filing a word into
  * a deck is a strong enough signal to silently clear a prior exclusion. */
 export async function addWordToDeck(deckId: string, simp: string): Promise<void> {
-  if (!(await ready())) return;
+  if (!(await writable())) return;
   const trimmed = simp.trim();
   if (!trimmed) return;
 
@@ -277,7 +279,7 @@ export async function addWordToDeck(deckId: string, simp: string): Promise<void>
 /** Manual-deck membership only — leaves the flashcard_cards row (and its SRS
  * state / other deck memberships) untouched. */
 export async function removeWordFromDeck(deckId: string, cardId: string): Promise<void> {
-  if (!(await ready())) return;
+  if (!(await writable())) return;
   await db!.execute({
     sql: "DELETE FROM flashcard_deck_cards WHERE deck_id = ? AND card_id = ?",
     args: [deckId, cardId],
@@ -289,7 +291,7 @@ export async function removeWordFromDeck(deckId: string, cardId: string): Promis
  * auto decks alike) without touching manual-deck membership rows —
  * restoreWord() below un-hides it back into exactly the decks it was already in. */
 export async function excludeWord(simp: string): Promise<void> {
-  if (!(await ready())) return;
+  if (!(await writable())) return;
   await db!.execute({
     sql: "UPDATE flashcard_cards SET excluded_at = ? WHERE user_id = ? AND simp = ?",
     args: [new Date().toISOString(), GUEST_USER_ID, simp.trim()],
@@ -297,7 +299,7 @@ export async function excludeWord(simp: string): Promise<void> {
 }
 
 export async function restoreWord(simp: string): Promise<void> {
-  if (!(await ready())) return;
+  if (!(await writable())) return;
   await db!.execute({
     sql: "UPDATE flashcard_cards SET excluded_at = NULL WHERE user_id = ? AND simp = ?",
     args: [GUEST_USER_ID, simp.trim()],
@@ -308,7 +310,7 @@ export async function restoreWord(simp: string): Promise<void> {
  * auto-detected leeches (see FlashcardEngine.isLeech). Does not touch
  * `lapses`, so it never corrupts the real failure count. */
 export async function flagWordHard(simp: string): Promise<void> {
-  if (!(await ready())) return;
+  if (!(await writable())) return;
   await db!.execute({
     sql: "UPDATE flashcard_cards SET flagged_hard_at = ? WHERE user_id = ? AND simp = ?",
     args: [new Date().toISOString(), GUEST_USER_ID, simp.trim()],
@@ -316,7 +318,7 @@ export async function flagWordHard(simp: string): Promise<void> {
 }
 
 export async function unflagWordHard(simp: string): Promise<void> {
-  if (!(await ready())) return;
+  if (!(await writable())) return;
   await db!.execute({
     sql: "UPDATE flashcard_cards SET flagged_hard_at = NULL WHERE user_id = ? AND simp = ?",
     args: [GUEST_USER_ID, simp.trim()],
@@ -330,7 +332,7 @@ export async function unflagWordHard(simp: string): Promise<void> {
  * caller is responsible for confirming with the user first. If viewed again
  * later, it re-enters as a brand-new card via upsertFlashcardOnView. */
 export async function forgetWord(simp: string): Promise<void> {
-  if (!(await ready())) return;
+  if (!(await writable())) return;
   const trimmed = simp.trim();
   if (!trimmed) return;
 
@@ -399,7 +401,7 @@ export async function getDeckSessions(deckId: string): Promise<DeckSessionEntry[
  * forgetWord(), which *does* delete review_log rows — there the intent is
  * "erase all memory of this word," a fundamentally different operation. */
 export async function deleteSession(sessionId: string): Promise<void> {
-  if (!(await ready())) return;
+  if (!(await writable())) return;
   await db!.batch(
     [
       { sql: "UPDATE flashcard_review_log SET session_id = NULL WHERE session_id = ?", args: [sessionId] },
@@ -473,7 +475,7 @@ export async function startSession(deckId: string): Promise<StartSessionResult> 
  * Either way, exactly one flashcard_sessions row is written, tagged with the
  * same flag, so streak/last-score history can be labeled honestly. */
 export async function submitSession(payload: SessionSubmitPayload): Promise<void> {
-  if (!(await ready())) return;
+  if (!(await writable())) return;
   const { deckId, deckLabel, startedAt, finishedAt, results, totalAttempts, aheadOfSchedule } = payload;
   if (results.length === 0) return;
 
