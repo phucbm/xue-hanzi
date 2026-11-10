@@ -1,35 +1,17 @@
 import type {Metadata, Viewport} from "next";
-import {Noto_Serif, Noto_Serif_SC} from "next/font/google";
 import {SwAutoUpdate} from "@/components/SwAutoUpdate";
 import {PWATracker} from "@/components/PWATracker";
 import {Toaster} from "@/components/ui/sonner";
 import {ThemeProvider} from "@/components/theme-provider";
 import pkg from "../../package.json";
+import "./fonts.css";
 import "./globals.css";
 
 /**
- * Noto Serif — body text, Vietnamese/Latin
- * Loaded with vietnamese subset for proper diacritic rendering.
+ * Fonts: Noto Serif (body text, Vietnamese/Latin) and Noto Serif SC (Chinese) are self-hosted in public/fonts/, with
+ * the @font-face rules in ./fonts.css (scripts/fetch-fonts.mjs). Not next/font/google: its build-time fetch failed on
+ * Vercel's builders. globals.css names the families (--font-noto-serif, --font-noto-serif-sc).
  */
-const notoSerif = Noto_Serif({
-  variable: "--font-noto-serif",
-  subsets: ["latin", "vietnamese"],
-  weight: ["400", "700"],
-  display: "swap",
-});
-
-/**
- * Noto Serif SC — Chinese character display (Simplified Chinese)
- * Not preloaded to avoid blocking render (large font file).
- */
-const notoSerifSC = Noto_Serif_SC({
-  variable: "--font-noto-serif-sc",
-  // "chinese-simplified" is loaded by default for SC fonts; only list latin here
-  subsets: ["latin"],
-  weight: ["400", "700"],
-  display: "swap",
-  preload: false,
-});
 
 export const metadata: Metadata = {
     applicationName: pkg.title,
@@ -66,7 +48,7 @@ export default function RootLayout({
     <html
       lang="vi"
       suppressHydrationWarning
-      className={`${notoSerif.variable} ${notoSerifSC.variable} h-full antialiased`}
+      className="h-full antialiased"
     >
       <body className="min-h-full flex flex-col bg-background text-foreground font-serif">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>

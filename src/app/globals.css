@@ -66,6 +66,9 @@
 }
 
 :root {
+  /* Self-hosted families (src/app/fonts.css). */
+  --font-noto-serif: "Noto Serif";
+  --font-noto-serif-sc: "Noto Serif SC";
   --background:        oklch(0.967 0.018 80);
   --foreground:        oklch(0.18 0.025 55);
   --card:              oklch(0.935 0.022 78);

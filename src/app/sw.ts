@@ -40,6 +40,14 @@ const serwist = new Serwist({
         plugins: [],
       }),
     },
+    // Self-hosted fonts (public/fonts/, one file per character range) — Cache First
+    {
+      matcher: /\/fonts\/.*\.woff2$/i,
+      handler: new CacheFirst({
+        cacheName: "fonts",
+        plugins: [],
+      }),
+    },
     // Google Fonts — Cache First
     {
       matcher: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/i,
